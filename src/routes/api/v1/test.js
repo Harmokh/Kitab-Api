@@ -24,7 +24,9 @@ module.exports = function (models, express) {
                     ],
                 },
 
-            ]
+            ],
+            success: true,
+            message: 'Books fetched successfully'
         })
     });
 
