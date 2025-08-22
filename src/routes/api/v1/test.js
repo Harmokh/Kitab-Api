@@ -12,19 +12,19 @@ const data = [
                 "id": "1",
                 "title": "Buzurgo ke Ahwal",
                 "language": "Bangla",
-                "url": "https://github.com/Harmokh/Kitab-Api/blob/main/public/pdfs/Buzurgon%20ke%20Wisal%20ke%20Ahwal%20Bangla%20Book%20(17-10-2019).pdf"
+                "url": "firebasestorage.googleapis.com/v0/b/quillblog-f5478.appspot.com/o/pdfs%2FBuzurgon%20ke%20Wisal%20ke%20Ahwal%20Bangla%20Book%20(17-10-2019).pdf?alt=media&token=5d71c186-f14e-43cf-bd54-ab9b473d1528"
             },
             {
                 "id": "2",
                 "title": "Buzurgo ke Ahwal",
                 "language": "English",
-                "url": "https://github.com/Harmokh/Kitab-Api/blob/main/public/pdfs/Final%20Moments%20of%20the%20Pious%20(BWA)%20(Eng%20Book).pdf"
+                "url": "firebasestorage.googleapis.com/v0/b/quillblog-f5478.appspot.com/o/pdfs%2FFinal%20Moments%20of%20the%20Pious%20(BWA)%20(Eng%20Book).pdf?alt=media&token=15d44ae8-2ba7-4192-a437-3841d1962f07"
             },
             {
                 "id": "3",
                 "title": "Buzurgo ke Ahwal",
                 "language": "Urdu",
-                "url": "https://github.com/Harmokh/Kitab-Api/blob/main/public/pdfs/Buzurgon%20ke%20Wisal%20ke%20Ahwal%20Urdu%20Book.pdf"
+                "url": "firebasestorage.googleapis.com/v0/b/quillblog-f5478.appspot.com/o/pdfs%2FBuzurgon%20ke%20Wisal%20ke%20Ahwal%20Urdu%20Book.pdf?alt=media&token=f5b1518f-e4d4-4940-8b38-9f8efe33bbb9"
             }
         ]
     }
@@ -62,10 +62,10 @@ module.exports = function (models, express) {
     // Get a specific book version by book ID and language version
     router.get("/test/book/version/:id", function (req, res) {
         const bookId = req.params.id;
-        const language = req.query.language; // e.g., /test/book/version/1?language=English
-
+        const language = req.query.language;
+        console.log(`Fetching book version for ID: ${bookId}, Language: ${language}`);
         const book = data.find(item => item.id === bookId);
-
+       
         if (!book) {
             return res.status(404).json({
                 success: false,
@@ -73,6 +73,7 @@ module.exports = function (models, express) {
             });
         }
         const version = book.books.find(b => b.language.toLowerCase() === (language || "").toLowerCase());
+        console.log(version);
         if (!version) {
             return res.status(404).json({
                 success: false,
