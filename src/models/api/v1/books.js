@@ -1,4 +1,3 @@
-// book.js
 module.exports = (sequelize, DataTypes) => {
   const Book = sequelize.define(
     "Book",
@@ -26,7 +25,6 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING,
         unique: true,
       },
-     
     },
     {
       tableName: "books",
@@ -34,8 +32,15 @@ module.exports = (sequelize, DataTypes) => {
     }
   );
 
-  // Associations (if needed later, e.g., Book belongsTo User)
+  // Associations
   Book.associate = (models) => {
+    // One book can have many versions
+    Book.hasMany(models.BookVersion, { 
+      foreignKey: "bookId", 
+      as: "versions", // optional alias for easier eager loading
+      onDelete: "CASCADE",
+    });
+
     // Example: Book.belongsTo(models.User, { foreignKey: "userId" });
   };
 
