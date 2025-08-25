@@ -6,10 +6,6 @@ var multer = require("multer");
 
 module.exports = function (models, express) {
     const { Book, BookVersion } = models;
-
-    // ---------------------------
-    // Multer storage for chunk uploads
-    // ---------------------------
     const uploadDir = path.join(__dirname, "../../../../public/pdfs");
     if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
 
@@ -91,7 +87,8 @@ module.exports = function (models, express) {
         try {
             const { bookId } = req.params;
             const { language, totalChunks, fileName } = req.body;
-            const finalPath = path.join(uploadDir, fileName);
+
+            const finalPath = path.join("./public/pdfs", fileName);
             const writeStream = fs.createWriteStream(finalPath);
             for (let i = 0; i < totalChunks; i++) {
                 const chunkPath = path.join(uploadDir, `${fileName}.part${i}`);
