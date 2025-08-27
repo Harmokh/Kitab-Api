@@ -5,30 +5,31 @@ const data = [
         "id": "1",
         "title": "Buzurgo ke Ahwal",
         "author": "Shaykh al-hadith Mawlana Yousuf Motala",
-        "cover": "https://raw.githubusercontent.com/Harmokh/Kitab-Api/refs/heads/main/public/images/9.jpg",
+        "cover": "public/images/9.jpg",
         "description": "A comprehensive guide to the life and teachings of Shaykh al-hadith Mawlana Yousuf Motala.",
         "books": [
             {
                 "id": "1",
                 "title": "Buzurgo ke Ahwal",
                 "language": "Bangla",
-                "url": "firebasestorage.googleapis.com/v0/b/quillblog-f5478.appspot.com/o/pdfs%2FBuzurgon%20ke%20Wisal%20ke%20Ahwal%20Bangla%20Book%20(17-10-2019).pdf?alt=media&token=5d71c186-f14e-43cf-bd54-ab9b473d1528"
+                "pdfUrl": "public/pdfs/bangla.pdf"
             },
             {
                 "id": "2",
                 "title": "Buzurgo ke Ahwal",
                 "language": "English",
-                "url": "firebasestorage.googleapis.com/v0/b/quillblog-f5478.appspot.com/o/pdfs%2FFinal%20Moments%20of%20the%20Pious%20(BWA)%20(Eng%20Book).pdf?alt=media&token=15d44ae8-2ba7-4192-a437-3841d1962f07"
+                "pdfUrl": "public/pdfs/english.pdf"
             },
             {
                 "id": "3",
                 "title": "Buzurgo ke Ahwal",
                 "language": "Urdu",
-                "url": "firebasestorage.googleapis.com/v0/b/quillblog-f5478.appspot.com/o/pdfs%2FBuzurgon%20ke%20Wisal%20ke%20Ahwal%20Urdu%20Book.pdf?alt=media&token=f5b1518f-e4d4-4940-8b38-9f8efe33bbb9"
+                "pdfUrl": "public/pdfs/urdu.pdf"
             }
         ]
     }
 ];
+
 module.exports = function (models, express) {
     // Test endpoint
     router.get("/test/test", function (req, res) {
@@ -42,7 +43,7 @@ module.exports = function (models, express) {
         });
     });
     // Get a single book by ID
-    router.get("/test/book/:id", function (req, res) {
+    router.get("/test/books/:id", function (req, res) {
         const bookId = req.params.id;
         const book = data.find(item => item.id === bookId);
 
