@@ -1,65 +1,63 @@
 const fs = require("fs");
 const path = require("path");
-const { Sequelize, DataTypes } = require("sequelize");
-
+const Sequelize = require("sequelize");
 const basename = path.basename(__filename);
-console.log("models", basename);
+require("dotenv").config();
 
 const db = {};
 
+// Initialize Sequelize for PostgreSQL
 const sequelize = new Sequelize(
-    process.env.DB_NAME,
-    process.env.DB_USER,
-    process.env.DB_PASSWORD,
-    {
-        host: process.env.DB_HOST || "127.0.0.1",
-        port: process.env.DB_PORT || 3306,
-        dialect: process.env.DB_DIALECT || "mysql",
-        logging: true,
-    }
+  process.env.DATABASE_NAME,
+  process.env.DATABASE_USER,
+  process.env.DATABASE_PASSWORD,
+  {
+    host: process.env.DATABASE_SERVER,
+    dialect: process.env.DATABASE_DIALECT || "postgres",
+    port: process.env.DATABASE_PORT || 5432,
+    logging: false, // Disable SQL logging
+    pool: {
+      max: 5,
+      min: 0,
+      acquire: 30000,
+      idle: 10000,
+    },
+  }
 );
 
-// ✅ Test DB connection first
-sequelize
-    .authenticate()
-    .then(() => {
-        console.log("✅ Database connection established.");
-    })
-    .catch((err) => {
-        console.error("❌ Unable to connect to the database:", err);
-    });
-
-// Load all models
+// Load all model files in the same directory
 fs.readdirSync(__dirname)
-    .filter(
-        (file) =>
-            file.indexOf(".") !== 0 &&
-            file !== basename &&
-            file.slice(-3) === ".js"
-    )
-    .forEach((file) => {
-        const model = require(path.join(__dirname, file))(sequelize, DataTypes);
-        db[model.name] = model;
-    });
+  .filter((file) => {
+    return (
+      file.indexOf(".") !== 0 && file !== basename && file.slice(-3) === ".js"
+    );
+  })
+  .forEach((file) => {
+    const model = require(path.join(__dirname, file))(
+      sequelize,
+      Sequelize.DataTypes
+    );
+    db[model.name] = model;
+  });
 
-// Run associations
+// Apply associations (if any)
 Object.keys(db).forEach((modelName) => {
-    if (db[modelName].associate) {
-        db[modelName].associate(db);
-    }
+  if (db[modelName].associate) {
+    db[modelName].associate(db);
+  }
 });
 
-// Sync models
+// Sync models to DB
 sequelize
-    .sync({ alter: true })
-    .then(() => {
-        console.log("✅ Models synced to DB!");
-    })
-    .catch((err) => {
-        console.error("❌ Error syncing models:", err);
-    });
+  .sync({ alter: false })
+  .then(() => {
+    console.log("All models synced with PostgreSQL database.");
+  })
+  .catch((err) => {
+    console.error("Error syncing models:", err);
+  });
 
-// Export db object
+// Export
 db.sequelize = sequelize;
 db.Sequelize = Sequelize;
 
