@@ -3,6 +3,7 @@ const authenticate = require("../middleware/authorize");
 const { Op } = require("sequelize");
 const { sequelize } = require("../models/models");
 const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
 
 module.exports = (models, router) => {
   const userRouter = router.Router();
@@ -14,7 +15,7 @@ module.exports = (models, router) => {
   };
 
   // ✅ Create or Update User
-  userRouter.post("/user/save", authenticate, async (req, res) => {
+  userRouter.post("/user/save", async (req, res) => {
     const { id, password, ...userData } = req.body;
 
     const t = await sequelize.transaction();
@@ -37,7 +38,10 @@ module.exports = (models, router) => {
 
       // Update
       if (id) {
-        userRecord = await models.User.findOne({ where: { id }, transaction: t });
+        userRecord = await models.User.findOne({
+          where: { id },
+          transaction: t,
+        });
         if (userRecord) {
           if (password) {
             userData.passwordHash = await hashPassword(password);
@@ -50,7 +54,11 @@ module.exports = (models, router) => {
       if (!userRecord) {
         if (!password) {
           await t.rollback();
-          return warning(res, "Password is required for new users", MessageType.Warning);
+          return warning(
+            res,
+            "Password is required for new users",
+            MessageType.Warning
+          );
         }
         userData.passwordHash = await hashPassword(password);
         userRecord = await models.User.create(userData, { transaction: t });
@@ -69,9 +77,47 @@ module.exports = (models, router) => {
       );
     } catch (err) {
       await t.rollback();
-      return error(res, err.message || "An error occurred while saving the user.");
+      return error(
+        res,
+        err.message || "An error occurred while saving the user."
+      );
     }
   });
+
+    // 🔑 User Login
+  userRouter.post("/user/login", async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      if (!email || !password) {
+        return warning(res, "Email and password are required", MessageType.Warning);
+      }
+
+      const userRecord = await models.User.findOne({
+        where: { email, isDeleted: false },
+        include: [{ model: models.Role, as: "Role" }],
+      });
+
+      if (!userRecord) {
+        return warning(res, "Invalid email or password", MessageType.Warning);
+      }
+
+      const isMatch = await bcrypt.compare(password, userRecord.passwordHash);
+      if (!isMatch) {
+        return warning(res, "Invalid email or password", MessageType.Warning);
+      }
+
+      const token = jwt.sign(
+        { id: userRecord.id, roleId: userRecord.roleId, email: userRecord.email },
+        process.env.JWT_SECRET,
+        { expiresIn: process.env.JWT_EXPIRES_IN }
+      );
+
+      return success(res, { token, user: userRecord }, "Login successful");
+    } catch (err) {
+      return error(res, err.message);
+    }
+  });
+
 
   // 🔍 Get User by ID
   userRouter.get("/user/getbyid", authenticate, async (req, res) => {
