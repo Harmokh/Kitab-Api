@@ -75,8 +75,8 @@ var routes = (models, router) => {
       try {
         var fs = require("fs");
         const index = req.query.url.indexOf("sp") + 3;
-        const filename = req.query.url.substring(index);
-        var dir = "./public/" + req.query.destination + "/" + filename;
+        // const filename = req.query.url.substring(index);
+        var dir = "./public/" + req.query.url;
         fs.unlink(dir, (err) => {
           if (err) {
             res.json(err);

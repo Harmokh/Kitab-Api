@@ -141,16 +141,16 @@ module.exports = (models, router) => {
   userRouter.get("/user/getall", authenticate, async (req, res) => {
     try {
       const { pageSize = 10, currentPage = 1, ...filters } = req.query;
-      const whereClause = { isDeleted: false };
+      // const whereClause = { isDeleted: false };
 
-      for (const key in filters) {
-        if (filters[key]) {
-          whereClause[key] = { [Op.iLike]: `%${filters[key]}%` };
-        }
-      }
+      // for (const key in filters) {
+      //   if (filters[key]) {
+      //     whereClause[key] = { [Op.iLike]: `%${filters[key]}%` };
+      //   }
+      // }
 
       const result = await models.User.findAndCountAll({
-        where: whereClause,
+        // where: whereClause,
         include: [{ model: models.Role, as: "Role" }],
         limit: parseInt(pageSize),
         offset: (parseInt(currentPage) - 1) * parseInt(pageSize),

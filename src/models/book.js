@@ -8,6 +8,7 @@ module.exports = (sequelize, Sequelize) => {
         primaryKey: true,
         defaultValue: sequelize.literal("gen_random_uuid()"),
       },
+      image: { field: "Image", type: Sequelize.STRING, allowNull: false },
       title: { field: "Title", type: Sequelize.STRING, allowNull: false },
       author: { field: "Author", type: Sequelize.STRING },
       description: { field: "Description", type: Sequelize.TEXT },
