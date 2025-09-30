@@ -163,49 +163,66 @@ module.exports = (models, router) => {
     }
   });
 
-  // 📄 Get PDF by Version ID and Page
-  bookRouter.get("/book/version/getpage", authenticate, async (req, res) => {
+  bookRouter.get("/book/version/getpages", async (req, res) => {
     try {
-      const { versionId, page = 1 } = req.query;
+      const { versionId, startPage = 1, endPage } = req.query;
+
       if (!versionId)
-        return warning(res, "versionId is required", MessageType.Warning);
+        return res
+          .status(400)
+          .json({ success: false, message: "versionId is required" });
 
       const version = await models.BookVersion.findByPk(versionId);
       if (!version)
-        return warning(res, "Book version not found", MessageType.Warning);
+        return res
+          .status(404)
+          .json({ success: false, message: "Book version not found" });
 
-      const pdfPath = path.join(rootDir, "public", "book", version.pdfPath);
+      const pdfPath = path.join(rootDir, "public", version.pdfPath);
       if (!fs.existsSync(pdfPath))
-        return warning(res, "PDF file not found", MessageType.Warning);
+        return res
+          .status(404)
+          .json({ success: false, message: "PDF file not found" });
 
-      const pdfBytes = fs.readFileSync(pdfPath);
-      const pdfDoc = await PDFDocument.load(pdfBytes);
-
+      const pdfDoc = await PDFDocument.load(fs.readFileSync(pdfPath));
       const totalPages = pdfDoc.getPageCount();
-      if (page < 1 || page > totalPages)
-        return warning(
-          res,
-          `Page number must be between 1 and ${totalPages}`,
-          MessageType.Warning
-        );
+
+      const start = parseInt(startPage);
+      const end = endPage ? parseInt(endPage) : start;
+
+      if (start < 1 || end > totalPages || start > end)
+        return res
+          .status(400)
+          .json({
+            success: false,
+            message: `Page range must be between 1 and ${totalPages}`,
+          });
 
       const newPdfDoc = await PDFDocument.create();
-      const [copiedPage] = await newPdfDoc.copyPages(pdfDoc, [
-        parseInt(page) - 1,
-      ]);
-      newPdfDoc.addPage(copiedPage);
-
-      const singlePageBytes = await newPdfDoc.save();
-      const base64Pdf = Buffer.from(singlePageBytes).toString("base64");
-
-      return success(
-        res,
-        { base64Pdf, page: parseInt(page), totalPages },
-        "PDF page fetched successfully"
+      const pagesToCopy = Array.from(
+        { length: end - start + 1 },
+        (_, i) => start - 1 + i
       );
+      const copiedPages = await newPdfDoc.copyPages(pdfDoc, pagesToCopy);
+
+      copiedPages.forEach((page) => newPdfDoc.addPage(page));
+
+      const pdfBytes = await newPdfDoc.save();
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader(
+        "Content-Disposition",
+        `inline; filename=pages-${start}-${end}.pdf`
+      );
+      res.send(Buffer.from(pdfBytes));
     } catch (err) {
       console.error(err);
-      return error(res, err.message || "Error fetching PDF page");
+      res
+        .status(500)
+        .json({
+          success: false,
+          message: err.message || "Error fetching PDF pages",
+        });
     }
   });
 
