@@ -11,39 +11,22 @@ module.exports = (models, router) => {
   // POST /book/save
   bookRouter.post("/book/save", authenticate, async (req, res) => {
     const {
-      id,
+      id, // BookId (for update)
       title,
-      author,
-      image,
-      description,
-      publishedYear,
-      isbn,
-      versions = [],
+      versions = [], // Array of BookVersion details
     } = req.body;
 
     try {
       const savedBook = await models.sequelize.transaction(async (t) => {
-        // 🔹 Check unique ISBN
-        // const existingBook = await models.Book.findOne({
-        //   where: { isbn, ...(id ? { id: { [Op.ne]: id } } : {}) },
-        //   transaction: t,
-        // });
-
-        // if (existingBook) {
-        //   throw new Error("ISBN must be unique");
-        // }
-
         let bookRecord;
+
         if (id) {
-          // 🔹 Update Book
+          // 🔹 Update existing Book
           bookRecord = await models.Book.findByPk(id, { transaction: t });
           if (bookRecord) {
-            await bookRecord.update(
-              { title, author, description, publishedYear, isbn, image },
-              { transaction: t }
-            );
+            await bookRecord.update({ title }, { transaction: t });
 
-            // 🔹 Remove old versions (if needed)
+            // 🔹 Remove old versions before inserting new ones
             await models.BookVersion.destroy({
               where: { bookId: id },
               transaction: t,
@@ -52,26 +35,40 @@ module.exports = (models, router) => {
         }
 
         if (!bookRecord) {
-          // 🔹 Create Book
-          bookRecord = await models.Book.create(
-            { title, author, description, publishedYear, isbn, image },
-            { transaction: t }
-          );
+          // 🔹 Create new Book
+          bookRecord = await models.Book.create({ title }, { transaction: t });
         }
 
-        // 🔹 Create Versions if provided
+        // 🔹 Create new BookVersions if provided
         if (versions.length > 0) {
+          // Validate unique ISBNs before insert
+          const isbnList = versions.map((v) => v.isbn).filter(Boolean);
+          if (isbnList.length > 0) {
+            const existingIsbn = await models.BookVersion.findOne({
+              where: { isbn: isbnList },
+              transaction: t,
+            });
+            if (existingIsbn) throw new Error("ISBN must be unique");
+          }
+
           const versionRecords = versions.map((v) => ({
             versionName: v.versionName,
             pdfPath: v.pdfPath,
             bookId: bookRecord.id,
+            author: v.author,
+            description: v.description,
+            publishedYear: v.publishedYear,
+            isbn: v.isbn,
+            image: v.image,
+            uploadedBy: v.uploadedBy,
           }));
+
           await models.BookVersion.bulkCreate(versionRecords, {
             transaction: t,
           });
         }
 
-        // 🔹 Return Book with Versions
+        // 🔹 Return full Book with Versions
         return models.Book.findByPk(bookRecord.id, {
           include: [{ model: models.BookVersion, as: "Versions" }],
           transaction: t,
@@ -87,6 +84,7 @@ module.exports = (models, router) => {
       if (err.message === "ISBN must be unique") {
         return warning(res, err.message, MessageType.Warning);
       }
+      console.error(err);
       return error(
         res,
         err.message || "An error occurred while saving the book."
@@ -191,12 +189,10 @@ module.exports = (models, router) => {
       const end = endPage ? parseInt(endPage) : start;
 
       if (start < 1 || end > totalPages || start > end)
-        return res
-          .status(400)
-          .json({
-            success: false,
-            message: `Page range must be between 1 and ${totalPages}`,
-          });
+        return res.status(400).json({
+          success: false,
+          message: `Page range must be between 1 and ${totalPages}`,
+        });
 
       const newPdfDoc = await PDFDocument.create();
       const pagesToCopy = Array.from(
@@ -217,12 +213,10 @@ module.exports = (models, router) => {
       res.send(Buffer.from(pdfBytes));
     } catch (err) {
       console.error(err);
-      res
-        .status(500)
-        .json({
-          success: false,
-          message: err.message || "Error fetching PDF pages",
-        });
+      res.status(500).json({
+        success: false,
+        message: err.message || "Error fetching PDF pages",
+      });
     }
   });
 
