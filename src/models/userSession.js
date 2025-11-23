@@ -11,7 +11,7 @@ module.exports = (sequelize, Sequelize) => {
       userId: {
         field: "UserId",
         type: Sequelize.UUID,
-        allowNull: false
+        allowNull: false,
       },
       loginTime: {
         field: "LoginTime",

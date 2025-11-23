@@ -19,6 +19,27 @@ module.exports = (sequelize, Sequelize) => {
         allowNull: false,
         unique: true,
       },
+      bio: {
+        field: "Bio",
+        type: Sequelize.STRING(4000),
+        allowNull: true,
+      },
+      address: {
+        field: "Address",
+        type: Sequelize.STRING(4000),
+        allowNull: true,
+      },
+      image: {
+        field: "Image",
+        type: Sequelize.STRING(4000),
+        allowNull: true,
+      },
+      googleId: {
+        field: "GoogleId",
+        type: Sequelize.STRING(1000),
+        allowNull: true,
+        unique: true,
+      },
       passwordHash: {
         field: "PasswordHash",
         type: Sequelize.STRING,
@@ -28,6 +49,11 @@ module.exports = (sequelize, Sequelize) => {
         field: "RoleId",
         type: Sequelize.INTEGER,
         allowNull: false,
+      },
+      isVerified: {
+        field: "IsVerified",
+        type: Sequelize.BOOLEAN,
+        allowNull: true,
       },
       isActive: {
         field: "IsActive",

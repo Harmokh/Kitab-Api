@@ -14,6 +14,16 @@ module.exports = (sequelize, Sequelize) => {
         type: Sequelize.UUID,
         allowNull: false,
       },
+      isActive: {
+        field: "IsActive",
+        type: Sequelize.BOOLEAN,
+        defaultValue: true,
+      },
+      isDeleted: {
+        field: "IsDeleted",
+        type: Sequelize.BOOLEAN,
+        defaultValue: false,
+      },
     },
     {
       tableName: "Favorites",

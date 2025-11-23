@@ -84,40 +84,69 @@ module.exports = (models, router) => {
     }
   });
 
-    // 🔑 User Login
+  // 🔑 User Login
   userRouter.post("/user/login", async (req, res) => {
+    const t = await sequelize.transaction();
     try {
       const { email, password } = req.body;
       if (!email || !password) {
-        return warning(res, "Email and password are required", MessageType.Warning);
+        await t.rollback();
+        return warning(
+          res,
+          "Email and password are required",
+          MessageType.Warning
+        );
       }
 
       const userRecord = await models.User.findOne({
         where: { email, isDeleted: false },
         include: [{ model: models.Role, as: "Role" }],
+        transaction: t,
       });
 
       if (!userRecord) {
+        await t.rollback();
         return warning(res, "Invalid email or password", MessageType.Warning);
       }
 
       const isMatch = await bcrypt.compare(password, userRecord.passwordHash);
       if (!isMatch) {
+        await t.rollback();
         return warning(res, "Invalid email or password", MessageType.Warning);
       }
 
+      // 🧠 Generate JWT token
       const token = jwt.sign(
-        { id: userRecord.id, roleId: userRecord.roleId, email: userRecord.email },
+        {
+          id: userRecord.id,
+          roleId: userRecord.roleId,
+          email: userRecord.email,
+        },
         process.env.JWT_SECRET,
         { expiresIn: process.env.JWT_EXPIRES_IN }
       );
 
+      // 🕒 Record user session (for dashboard analytics)
+      await models.UserSession.create(
+        {
+          userId: userRecord.id,
+          loginTime: new Date(),
+          ipAddress: req.ip || req.headers["x-forwarded-for"] || null,
+          userAgent: req.headers["user-agent"] || null,
+          isActive: true,
+        },
+        { transaction: t }
+      );
+
+      await t.commit();
+
       return success(res, { token, user: userRecord }, "Login successful");
     } catch (err) {
-      return error(res, err.message);
+      await t.rollback();
+      console.error("Login error:", err);
+      return error(res, err.message || "Login failed");
     }
   });
-
 
   // 🔍 Get User by ID
   userRouter.get("/user/getbyid", authenticate, async (req, res) => {
@@ -150,7 +179,7 @@ module.exports = (models, router) => {
       // }
 
       const result = await models.User.findAndCountAll({
-        // where: whereClause,
+        where: { isDeleted: false },
         include: [{ model: models.Role, as: "Role" }],
         limit: parseInt(pageSize),
         offset: (parseInt(currentPage) - 1) * parseInt(pageSize),

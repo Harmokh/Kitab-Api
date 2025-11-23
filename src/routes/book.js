@@ -13,6 +13,9 @@ module.exports = (models, router) => {
     const {
       id, // BookId (for update)
       title,
+      coverImage,
+      description,
+      author,
       versions = [], // Array of BookVersion details
     } = req.body;
 
@@ -24,7 +27,7 @@ module.exports = (models, router) => {
           // 🔹 Update existing Book
           bookRecord = await models.Book.findByPk(id, { transaction: t });
           if (bookRecord) {
-            await bookRecord.update({ title }, { transaction: t });
+            await bookRecord.update({ title, coverImage, description, author }, { transaction: t });
 
             // 🔹 Remove old versions before inserting new ones
             await models.BookVersion.destroy({
@@ -36,7 +39,7 @@ module.exports = (models, router) => {
 
         if (!bookRecord) {
           // 🔹 Create new Book
-          bookRecord = await models.Book.create({ title }, { transaction: t });
+          bookRecord = await models.Book.create({ title, coverImage, description, author }, { transaction: t });
         }
 
         // 🔹 Create new BookVersions if provided

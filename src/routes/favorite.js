@@ -4,12 +4,12 @@ const authenticate = require("../middleware/authorize");
 module.exports = (models, router) => {
   const favoriteRouter = router.Router();
 
-  // ✅ Add or Toggle Favorite
   // POST /favorite/save
   favoriteRouter.post("/favorite/save", authenticate, async (req, res) => {
     try {
       const { bookVersionId } = req.body;
-      if (!bookVersionId) return warning(res, "bookVersionId is required", MessageType.Warning);
+      if (!bookVersionId)
+        return warning(res, "bookVersionId is required", MessageType.Warning);
 
       // Check if already favorited
       let favorite = await models.Favorite.findOne({
@@ -33,7 +33,7 @@ module.exports = (models, router) => {
 
   // 🔍 Get All Favorites
   // GET /favorite/getall
-  favoriteRouter.get("/favorite/getall", authenticate, async (req, res) => {
+  favoriteRouter.get("/favorite/getallbyuser", authenticate, async (req, res) => {
     try {
       const { pageSize = 10, currentPage = 1 } = req.query;
 
@@ -69,7 +69,8 @@ module.exports = (models, router) => {
   favoriteRouter.get("/favorite/getbyid", authenticate, async (req, res) => {
     try {
       const { id } = req.query;
-      if (!id) return warning(res, "Favorite id is required", MessageType.Warning);
+      if (!id)
+        return warning(res, "Favorite id is required", MessageType.Warning);
 
       const favorite = await models.Favorite.findOne({
         where: { id, userId: req.user.id, isDeleted: false },
@@ -79,13 +80,18 @@ module.exports = (models, router) => {
             as: "BookVersion",
             attributes: ["id", "bookId", "filePath", "originalName"],
             include: [
-              { model: models.Book, as: "Book", attributes: ["id", "title", "author", "description"] },
+              {
+                model: models.Book,
+                as: "Book",
+                attributes: ["id", "title", "author", "description"],
+              },
             ],
           },
         ],
       });
 
-      if (!favorite) return warning(res, "Favorite not found", MessageType.Warning);
+      if (!favorite)
+        return warning(res, "Favorite not found", MessageType.Warning);
       return success(res, favorite, "Favorite fetched successfully");
     } catch (err) {
       return error(res, err.message);
@@ -97,7 +103,8 @@ module.exports = (models, router) => {
   favoriteRouter.delete("/favorite/delete", authenticate, async (req, res) => {
     try {
       const { id } = req.query;
-      if (!id) return warning(res, "Favorite id is required", MessageType.Warning);
+      if (!id)
+        return warning(res, "Favorite id is required", MessageType.Warning);
 
       const [updated] = await models.Favorite.update(
         { isDeleted: true, isActive: false },

@@ -8,7 +8,32 @@ module.exports = (sequelize, Sequelize) => {
         primaryKey: true,
         defaultValue: sequelize.literal("gen_random_uuid()"),
       },
+      coverImage: {
+        field: "CoverImage",
+        type: Sequelize.STRING(3000),
+        allowNull: true,
+      },
+      author: {
+        field: "Author",
+        type: Sequelize.STRING(1000),
+        allowNull: true,
+      },
+      description: {
+        field: "Description",
+        type: Sequelize.STRING(4000),
+        allowNull: true,
+      },
       title: { field: "Title", type: Sequelize.STRING, allowNull: false },
+      isActive: {
+        field: "IsActive",
+        type: Sequelize.BOOLEAN,
+        defaultValue: true,
+      },
+      isDeleted: {
+        field: "IsDeleted",
+        type: Sequelize.BOOLEAN,
+        defaultValue: false,
+      },
     },
     {
       tableName: "Books",
