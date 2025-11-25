@@ -74,6 +74,73 @@ module.exports = (models, router) => {
     }
   });
 
+  bookmarkRouter.get(
+    "/bookmark/getgroupedbookmarks",
+    authenticate,
+    async (req, res) => {
+      try {
+        const { pageSize = 10, currentPage = 1, bookId } = req.query;
+
+        const size = parseInt(pageSize);
+        const page = parseInt(currentPage);
+
+        const bookWhere = { isDeleted: false };
+        if (bookId) bookWhere.id = bookId;
+
+        const result = await models.Book.findAndCountAll({
+          where: bookWhere,
+          attributes: [
+            "id",
+            "title",
+            "coverImage",
+            "author",
+            "description",
+            "CreatedAt",
+          ],
+          limit: size,
+          offset: (page - 1) * size,
+          order: [["CreatedAt", "DESC"]],
+
+          include: [
+            {
+              model: models.BookVersion,
+              as: "Versions",
+              attributes: ["id", "versionName", "pdfPath", "image"],
+              required: false,
+
+              include: [
+                {
+                  model: models.Bookmark,
+                  as: "Bookmarks",
+                  attributes: ["id", "pageNumber", "CreatedAt"],
+                  required: false,
+                  where: {
+                    userId: req.user.id,
+                    isDeleted: false,
+                  },
+                },
+              ],
+            },
+          ],
+        });
+
+        return success(
+          res,
+          {
+            totalBooks: result.count,
+            pageSize: size,
+            currentPage: page,
+            totalPages: Math.ceil(result.count / size),
+            data: result.rows,
+          },
+          "Books with versions + bookmarks fetched successfully"
+        );
+      } catch (err) {
+        return error(res, err.message);
+      }
+    }
+  );
+
   // 🔍 Get All Bookmarks for a Book Version
   // GET /bookmark/getbyversion
   bookmarkRouter.get(
@@ -111,7 +178,22 @@ module.exports = (models, router) => {
           {
             model: models.BookVersion,
             as: "BookVersion",
-            attributes: ["id", "bookId", "filePath", "originalName"],
+            attributes: ["id", "versionName", "pdfPath", "image"],
+            include: [
+              {
+                model: models.Book,
+                as: "Book",
+                attributes: [
+                  "id",
+                  "title",
+                  "coverImage",
+                  "author",
+                  "description",
+                  "CreatedAt",
+                ],
+                required: false
+              },
+            ],
           },
         ],
       });
@@ -132,10 +214,9 @@ module.exports = (models, router) => {
       if (!id)
         return warning(res, "Bookmark id is required", MessageType.Warning);
 
-      const [updated] = await models.Bookmark.update(
-        { isDeleted: true, isActive: false },
-        { where: { id, userId: req.user.id } }
-      );
+      const updated = await models.Bookmark.destroy({
+        where: { id, userId: req.user.id },
+      });
 
       if (updated) return success(res, null, "Bookmark deleted successfully");
       else return warning(res, "Bookmark not found", MessageType.Warning);

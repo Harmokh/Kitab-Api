@@ -33,36 +33,40 @@ module.exports = (models, router) => {
 
   // 🔍 Get All Favorites
   // GET /favorite/getall
-  favoriteRouter.get("/favorite/getallbyuser", authenticate, async (req, res) => {
-    try {
-      const { pageSize = 10, currentPage = 1 } = req.query;
+  favoriteRouter.get(
+    "/favorite/getallbyuser",
+    authenticate,
+    async (req, res) => {
+      try {
+        const { pageSize = 10, currentPage = 1 } = req.query;
 
-      const result = await models.Favorite.findAndCountAll({
-        where: { userId: req.user.id, isDeleted: false },
-        include: [
-          {
-            model: models.BookVersion,
-            as: "BookVersion",
-            attributes: ["id", "bookId", "filePath", "originalName"],
-            include: [
-              {
-                model: models.Book,
-                as: "Book",
-                attributes: ["id", "title", "author", "description"],
-              },
-            ],
-          },
-        ],
-        limit: parseInt(pageSize),
-        offset: (parseInt(currentPage) - 1) * parseInt(pageSize),
-        order: [["CreatedAt", "DESC"]],
-      });
+        const result = await models.Favorite.findAndCountAll({
+          where: { userId: req.user.id, isDeleted: false },
+          include: [
+            {
+              model: models.BookVersion,
+              as: "BookVersion",
+              attributes: ["id", "bookId", "pdfPath", "versionName"],
+              include: [
+                {
+                  model: models.Book,
+                  as: "Book",
+                  attributes: ["id", "title", "author", "description"],
+                },
+              ],
+            },
+          ],
+          limit: parseInt(pageSize),
+          offset: (parseInt(currentPage) - 1) * parseInt(pageSize),
+          order: [["CreatedAt", "DESC"]],
+        });
 
-      return success(res, result, "Favorites fetched successfully");
-    } catch (err) {
-      return error(res, err.message);
+        return success(res, result, "Favorites fetched successfully");
+      } catch (err) {
+        return error(res, err.message);
+      }
     }
-  });
+  );
 
   // 🔍 Get Favorite by ID
   // GET /favorite/getbyid
@@ -78,7 +82,7 @@ module.exports = (models, router) => {
           {
             model: models.BookVersion,
             as: "BookVersion",
-            attributes: ["id", "bookId", "filePath", "originalName"],
+            attributes: ["id", "bookId", "pdfPath", "versionName"],
             include: [
               {
                 model: models.Book,
@@ -106,10 +110,9 @@ module.exports = (models, router) => {
       if (!id)
         return warning(res, "Favorite id is required", MessageType.Warning);
 
-      const [updated] = await models.Favorite.update(
-        { isDeleted: true, isActive: false },
-        { where: { id, userId: req.user.id } }
-      );
+      const updated = await models.Favorite.destroy({
+        where: { id, userId: req.user.id },
+      });
 
       if (updated) return success(res, null, "Favorite removed successfully");
       else return warning(res, "Favorite not found", MessageType.Warning);
