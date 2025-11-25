@@ -60,7 +60,7 @@ module.exports = (models, router) => {
           {
             model: models.BookVersion,
             as: "BookVersion",
-            attributes: ["id", "bookId", "filePath", "originalName"],
+            attributes: ["id", "bookId", "pdfPath", "versionName"],
           },
         ],
         limit: parseInt(pageSize),
