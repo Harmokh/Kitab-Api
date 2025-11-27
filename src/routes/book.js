@@ -240,6 +240,57 @@ module.exports = (models, router) => {
       return error(res, err.message);
     }
   });
+  // 🔍 SEARCH BOOKS (by title, author, isbn, version name, or keyword)
+  bookRouter.get("/book/search", authenticate, async (req, res) => {
+    try {
+      const { query } = req.query;
+
+      if (!query || query.trim() === "") {
+        return warning(res, "Search query is required", MessageType.Warning);
+      }
+      const searchTerm = `%${query}%`;
+      const books = await models.Book.findAll({
+        where: {
+          isDeleted: false,
+          [Op.or]: [
+            { title: { [Op.iLike]: searchTerm } },
+            { author: { [Op.iLike]: searchTerm } },
+            { description: { [Op.iLike]: searchTerm } },
+          ]
+        },
+        include: [
+          {
+            model: models.BookVersion,
+            as: "Versions",
+            required: false,
+            where: {
+              [Op.or]: [
+                { versionName: { [Op.iLike]: searchTerm } },
+                { isbn: { [Op.iLike]: searchTerm } },
+                { description: { [Op.iLike]: searchTerm } },
+                { publishedYear: { [Op.iLike]: searchTerm } },
+              ]
+            }
+          }
+        ],
+        order: [["CreatedAt", "DESC"]],
+      });
+
+      if (!books || books.length === 0) {
+        return warning(
+          res,
+          "No books found matching your search",
+          MessageType.Warning
+        );
+      }
+
+      return success(res, books, "Search results fetched successfully");
+    } catch (err) {
+      console.error(err);
+      return error(res, err.message || "Error while searching books");
+    }
+  });
+
 
   return bookRouter;
 };

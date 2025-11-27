@@ -46,12 +46,12 @@ module.exports = (models, router) => {
             {
               model: models.BookVersion,
               as: "BookVersion",
-              attributes: ["id", "bookId", "pdfPath", "versionName"],
+
               include: [
                 {
                   model: models.Book,
                   as: "Book",
-                  attributes: ["id", "title", "author", "description"],
+
                 },
               ],
             },
@@ -82,12 +82,12 @@ module.exports = (models, router) => {
           {
             model: models.BookVersion,
             as: "BookVersion",
-            attributes: ["id", "bookId", "pdfPath", "versionName"],
+
             include: [
               {
                 model: models.Book,
                 as: "Book",
-                attributes: ["id", "title", "author", "description"],
+
               },
             ],
           },
