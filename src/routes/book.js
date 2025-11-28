@@ -258,7 +258,7 @@ module.exports = (models, router) => {
             { title: { [Op.iLike]: searchTerm } },
             { author: { [Op.iLike]: searchTerm } },
             { description: { [Op.iLike]: searchTerm } },
-          ]
+          ],
         },
         include: [
           {
@@ -268,23 +268,18 @@ module.exports = (models, router) => {
             where: {
               [Op.or]: [
                 { versionName: { [Op.iLike]: searchTerm } },
-
-                // isbn might be integer or string
                 Sequelize.where(
                   Sequelize.cast(Sequelize.col("Versions.isbn"), "TEXT"),
                   { [Op.iLike]: searchTerm }
                 ),
-
                 { description: { [Op.iLike]: searchTerm } },
-
-                // FIX for integer year
                 Sequelize.where(
                   Sequelize.cast(Sequelize.col("Versions.publishedYear"), "TEXT"),
                   { [Op.iLike]: searchTerm }
                 ),
-              ]
-            }
-          }
+              ],
+            },
+          },
         ],
         order: [["CreatedAt", "DESC"]],
       });
@@ -294,10 +289,8 @@ module.exports = (models, router) => {
       }
 
       return success(res, books, "Search results fetched successfully");
-
     } catch (err) {
-      console.error(err);
-      return error(res, err.message || "Error while searching books");
+      return error(res, err.message);
     }
   });
 
