@@ -1,58 +1,59 @@
 const nodemailer = require("nodemailer");
-var path = require("path");
+const path = require("path");
 const { error, success } = require("./response");
-dotenv = require("dotenv").config({
+const dotenv = require("dotenv");
+
+dotenv.config({
   path: path.resolve(__dirname, "../../.env"),
 });
-let transporter = nodemailer.createTransport({
-  host: dotenv.parsed.SMTP_SERVER,
-  port: dotenv.parsed.SMTP_SERVER_PORT,
+
+// Create transporter once
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_SERVER,
+  port: Number(process.env.SMTP_SERVER_PORT),
   auth: {
-    user: dotenv.parsed.FROM_EMAIL,
-    pass: dotenv.parsed.SMTP_USER_PASSWORD,
+    user: process.env.FROM_EMAIL,
+    pass: process.env.SMTP_USER_PASSWORD,
   },
 });
 
-sendTemplateMail = async (to, subject, body, res, data, models) => {
-  message = {
-    from: dotenv.parsed.FROM_EMAIL,
-    to: to,
-    subject: subject,
+/**
+ * Retry helper
+ */
+async function retry(fn, attempts) {
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      console.error("Retry error:", err);
+    }
+  }
+}
+
+/**
+ * Send template mail
+ */
+const sendTemplateMail = async (to, subject, body, res, data) => {
+  const message = {
+    from: process.env.FROM_EMAIL,
+    to,
+    subject,
     html: body,
   };
-  retry(
+
+  await retry(
     () =>
-      transporter.sendMail(message, (err, info) => {
+      transporter.sendMail(message, (err) => {
         if (err) {
           return error(
             res,
             err.message || "An error occurred while sending the mail"
           );
-        } else {
-          return success(res, data, "Mail Sent successfully");
         }
+        return success(res, data, "Mail sent successfully");
       }),
     3
   );
-  // transporter.sendMail(message, (err, info) => {
-  //   if (err) {
-  //     res.boom.badRequest(err);
-  //   } else {
-  //     res.status(200).send(data);
-  //   }
-  // });
 };
 
-async function retry(fn, n) {
-  for (let i = 0; i < n; i++) {
-    try {
-      return await fn();
-    } catch (err) {
-      console.log(err);
-    }
-  }
-}
-
-module.exports = {
-  sendTemplateMail,
-};
+module.exports = { sendTemplateMail };
