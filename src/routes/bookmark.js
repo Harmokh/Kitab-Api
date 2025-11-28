@@ -89,14 +89,6 @@ module.exports = (models, router) => {
 
         const result = await models.Book.findAndCountAll({
           where: bookWhere,
-          attributes: [
-            "id",
-            "title",
-            "coverImage",
-            "author",
-            "description",
-            "CreatedAt",
-          ],
           limit: size,
           offset: (page - 1) * size,
           order: [["CreatedAt", "DESC"]],
