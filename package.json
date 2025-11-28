@@ -10,7 +10,9 @@
     "prod": "NODE_ENV=production node server.js",
     "dev:win": "set NODE_ENV=development&& node server.js",
     "staging:win": "set NODE_ENV=staging&& node server.js",
-    "prod:win": "set NODE_ENV=production&& node server.js"
+    "prod:win": "set NODE_ENV=production&& node server.js",
+    "lint": "eslint .",
+    "test": "echo \"No tests defined\" && exit 0"
   },
   "keywords": [],
   "author": "",
@@ -38,6 +40,8 @@
     "util": "^0.12.5"
   },
   "devDependencies": {
+    "eslint": "^9.39.1",
+    "globals": "^16.5.0",
     "nodemon": "^3.1.10",
     "sequelize-cli": "^6.6.3"
   }
