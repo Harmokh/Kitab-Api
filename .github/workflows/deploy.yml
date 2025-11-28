@@ -33,15 +33,6 @@ jobs:
             # Navigate to the app directory
             cd /var/www/kitab/kitab-api
 
-            # 1️⃣ Backup public folder just in case
-            if [ -d public ]; then
-              rm -rf public_backup
-              cp -r public public_backup
-            fi
-
-            # 2️⃣ Ensure public folder exists (attachments folder will stay)
-            mkdir -p public
-
             # 3️⃣ Pull latest code safely (ignores public/ if in .gitignore)
             git fetch origin main
             git reset --hard origin/main
