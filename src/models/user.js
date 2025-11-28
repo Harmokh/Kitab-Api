@@ -91,6 +91,7 @@ module.exports = (sequelize, Sequelize) => {
       as: "Engagements",
     });
     User.hasMany(models.UserSession, { foreignKey: "userId", as: "Sessions" });
+    User.hasMany(models.UserDevice, { foreignKey: "userId", as: "Devices" });
   };
 
   return User;
