@@ -121,34 +121,40 @@ module.exports = (models, router) => {
     try {
       let { pageSize = 10, currentPage = 1, query } = req.query;
 
-      if (!query || query.trim() === "") {
-        return warning(res, "Search query is required", MessageType.Warning);
+      // Base where clause (always applied)
+      const whereClause = {};
+
+      // Apply search only if query is provided
+      if (query && query.trim() !== "") {
+        whereClause[Op.or] = [
+          { title: { [Op.iLike]: `%${query}%` } },
+          { author: { [Op.iLike]: `%${query}%` } },
+          { description: { [Op.iLike]: `%${query}%` } },
+        ];
       }
 
-      const result = await models.Book.findAndCountAll({
-        where: {
-          [Op.or]: [
-            { title: { [Op.iLike]: `%${query}%` } },
-            { author: { [Op.iLike]: `%${query}%` } },
-            { description: { [Op.iLike]: `%${query}%` } },
-          ],
+      // Include BookVersion with conditional search
+      const includeClause = [
+        {
+          model: models.BookVersion,
+          as: "Versions",
+          required: false,
+          where:
+            query && query.trim() !== ""
+              ? {
+                  [Op.or]: [
+                    { versionName: { [Op.iLike]: `%${query}%` } },
+                    { isbn: { [Op.iLike]: `%${query}%` } },
+                    { description: { [Op.iLike]: `%${query}%` } },
+                  ],
+                }
+              : undefined, // Don't filter if query is empty
         },
+      ];
 
-        include: [
-          {
-            model: models.BookVersion,
-            as: "Versions",
-            required: false,
-            where: {
-              [Op.or]: [
-                { versionName: { [Op.iLike]: `%${query}%` } },
-                { isbn: { [Op.iLike]: `%${query}%` } },
-                { description: { [Op.iLike]: `%${query}%` } }
-              ],
-            },
-          },
-        ],
-
+      const result = await models.Book.findAndCountAll({
+        where: whereClause,
+        include: includeClause,
         limit: parseInt(pageSize),
         offset: (parseInt(currentPage) - 1) * parseInt(pageSize),
         order: [["CreatedAt", "DESC"]],
@@ -301,7 +307,10 @@ module.exports = (models, router) => {
                 ),
                 { description: { [Op.iLike]: searchTerm } },
                 Sequelize.where(
-                  Sequelize.cast(Sequelize.col("Versions.publishedYear"), "TEXT"),
+                  Sequelize.cast(
+                    Sequelize.col("Versions.publishedYear"),
+                    "TEXT"
+                  ),
                   { [Op.iLike]: searchTerm }
                 ),
               ],
@@ -312,7 +321,11 @@ module.exports = (models, router) => {
       });
 
       if (!books || books.length === 0) {
-        return warning(res, "No books found matching your search", MessageType.Warning);
+        return warning(
+          res,
+          "No books found matching your search",
+          MessageType.Warning
+        );
       }
 
       return success(res, books, "Search results fetched successfully");
@@ -320,8 +333,6 @@ module.exports = (models, router) => {
       return error(res, err.message);
     }
   });
-
-
 
   return bookRouter;
 };
