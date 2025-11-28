@@ -11,7 +11,6 @@ var storage = multer.diskStorage({
     callback(null, dir);
   },
   filename: function (req, file, callback) {
-    fileorignalname = file.originalname;
     filenamedb =
       new Date().getDate() +
       Math.floor(Math.random() * 10000000000000) +

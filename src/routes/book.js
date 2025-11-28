@@ -1,6 +1,7 @@
 const { success, warning, error, MessageType } = require("../utils/response");
 const authenticate = require("../middleware/authorize");
 const { Op } = require("sequelize");
+const Sequelize = require("sequelize");
 const path = require("path");
 const fs = require("fs");
 const { PDFDocument } = require("pdf-lib");
