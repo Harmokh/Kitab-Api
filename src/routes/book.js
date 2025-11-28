@@ -248,7 +248,9 @@ module.exports = (models, router) => {
       if (!query || query.trim() === "") {
         return warning(res, "Search query is required", MessageType.Warning);
       }
+
       const searchTerm = `%${query}%`;
+
       const books = await models.Book.findAll({
         where: {
           isDeleted: false,
@@ -266,9 +268,20 @@ module.exports = (models, router) => {
             where: {
               [Op.or]: [
                 { versionName: { [Op.iLike]: searchTerm } },
-                { isbn: { [Op.iLike]: searchTerm } },
+
+                // isbn might be integer or string
+                Sequelize.where(
+                  Sequelize.cast(Sequelize.col("Versions.isbn"), "TEXT"),
+                  { [Op.iLike]: searchTerm }
+                ),
+
                 { description: { [Op.iLike]: searchTerm } },
-                { publishedYear: { [Op.iLike]: searchTerm } },
+
+                // FIX for integer year
+                Sequelize.where(
+                  Sequelize.cast(Sequelize.col("Versions.publishedYear"), "TEXT"),
+                  { [Op.iLike]: searchTerm }
+                ),
               ]
             }
           }
@@ -277,19 +290,17 @@ module.exports = (models, router) => {
       });
 
       if (!books || books.length === 0) {
-        return warning(
-          res,
-          "No books found matching your search",
-          MessageType.Warning
-        );
+        return warning(res, "No books found matching your search", MessageType.Warning);
       }
 
       return success(res, books, "Search results fetched successfully");
+
     } catch (err) {
       console.error(err);
       return error(res, err.message || "Error while searching books");
     }
   });
+
 
 
   return bookRouter;
