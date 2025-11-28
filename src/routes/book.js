@@ -125,8 +125,6 @@ module.exports = (models, router) => {
         return warning(res, "Search query is required", MessageType.Warning);
       }
 
-      query = "";
-
       const result = await models.Book.findAndCountAll({
         where: {
           [Op.or]: [
