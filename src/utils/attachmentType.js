@@ -4,3 +4,4 @@ const AttachmentType = Object.freeze({
 });
 
 module.exports = AttachmentType;
+
