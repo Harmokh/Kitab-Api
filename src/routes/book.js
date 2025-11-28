@@ -119,7 +119,7 @@ module.exports = (models, router) => {
   // 📄 Get All Books with Pagination & Filters
   bookRouter.get("/book/getall", authenticate, async (req, res) => {
     try {
-      const { pageSize = 10, currentPage = 1, query } = req.query;
+      let { pageSize = 10, currentPage = 1, query } = req.query;
 
       if (!query || query.trim() === "") {
         return warning(res, "Search query is required", MessageType.Warning);
