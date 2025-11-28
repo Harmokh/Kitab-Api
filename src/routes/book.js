@@ -27,7 +27,10 @@ module.exports = (models, router) => {
           // 🔹 Update existing Book
           bookRecord = await models.Book.findByPk(id, { transaction: t });
           if (bookRecord) {
-            await bookRecord.update({ title, coverImage, description, author }, { transaction: t });
+            await bookRecord.update(
+              { title, coverImage, description, author },
+              { transaction: t }
+            );
 
             // 🔹 Remove old versions before inserting new ones
             await models.BookVersion.destroy({
@@ -39,7 +42,10 @@ module.exports = (models, router) => {
 
         if (!bookRecord) {
           // 🔹 Create new Book
-          bookRecord = await models.Book.create({ title, coverImage, description, author }, { transaction: t });
+          bookRecord = await models.Book.create(
+            { title, coverImage, description, author },
+            { transaction: t }
+          );
         }
 
         // 🔹 Create new BookVersions if provided
@@ -112,17 +118,36 @@ module.exports = (models, router) => {
   // 📄 Get All Books with Pagination & Filters
   bookRouter.get("/book/getall", authenticate, async (req, res) => {
     try {
-      const { pageSize = 10, currentPage = 1, ...filters } = req.query;
-      const whereClause = {};
+      const { pageSize = 10, currentPage = 1, query } = req.query;
 
-      // for (const key in filters) {
-      //   if (filters[key])
-      //     whereClause[key] = { [Op.iLike]: `%${filters[key]}%` };
-      // }
+      if (!query || query.trim() === "") {
+        return warning(res, "Search query is required", MessageType.Warning);
+      }
 
       const result = await models.Book.findAndCountAll({
-        // where: whereClause,
-        include: [{ model: models.BookVersion, as: "Versions" }],
+        where: {
+          [Op.or]: [
+            { title: { [Op.iLike]: `%${query}%` } },
+            { author: { [Op.iLike]: `%${query}%` } },
+            { description: { [Op.iLike]: `%${query}%` } },
+          ],
+        },
+
+        include: [
+          {
+            model: models.BookVersion,
+            as: "Versions",
+            required: false,
+            where: {
+              [Op.or]: [
+                { versionName: { [Op.iLike]: `%${query}%` } },
+                { isbn: { [Op.iLike]: `%${query}%` } },
+                { description: { [Op.iLike]: `%${query}%` } }
+              ],
+            },
+          },
+        ],
+
         limit: parseInt(pageSize),
         offset: (parseInt(currentPage) - 1) * parseInt(pageSize),
         order: [["CreatedAt", "DESC"]],
@@ -240,6 +265,7 @@ module.exports = (models, router) => {
       return error(res, err.message);
     }
   });
+
   // 🔍 SEARCH BOOKS (by title, author, isbn, version name, or keyword)
   bookRouter.get("/book/search", authenticate, async (req, res) => {
     try {
@@ -248,6 +274,7 @@ module.exports = (models, router) => {
       if (!query || query.trim() === "") {
         return warning(res, "Search query is required", MessageType.Warning);
       }
+
       const searchTerm = `%${query}%`;
       const books = await models.Book.findAll({
         where: {
@@ -256,7 +283,7 @@ module.exports = (models, router) => {
             { title: { [Op.iLike]: searchTerm } },
             { author: { [Op.iLike]: searchTerm } },
             { description: { [Op.iLike]: searchTerm } },
-          ]
+          ],
         },
         include: [
           {
@@ -269,9 +296,9 @@ module.exports = (models, router) => {
                 { isbn: { [Op.iLike]: searchTerm } },
                 { description: { [Op.iLike]: searchTerm } },
                 { publishedYear: { [Op.iLike]: searchTerm } },
-              ]
-            }
-          }
+              ],
+            },
+          },
         ],
         order: [["CreatedAt", "DESC"]],
       });
@@ -290,7 +317,6 @@ module.exports = (models, router) => {
       return error(res, err.message || "Error while searching books");
     }
   });
-
 
   return bookRouter;
 };
