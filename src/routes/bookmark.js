@@ -206,7 +206,7 @@ module.exports = (models, router) => {
     }
   });
 
-  // 🗑️ Delete Bookmark (Soft Delete)
+  // 🗑️ Delete Bookmark (Hard Delete)
   // DELETE /bookmark/delete
   bookmarkRouter.delete("/bookmark/delete", authenticate, async (req, res) => {
     try {
