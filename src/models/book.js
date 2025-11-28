@@ -35,6 +35,7 @@ module.exports = (sequelize, Sequelize) => {
         defaultValue: false,
       },
     },
+    
     {
       tableName: "Books",
       timestamps: true,

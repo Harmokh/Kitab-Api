@@ -25,7 +25,7 @@ jobs:
           port: ${{ secrets.SERVER_PORT }} # Optional, default is 22
           script: |
             # Navigate to the app directory
-            cd /path/to/your/app # <--- UPDATE THIS TO YOUR ACTUAL SERVER PATH
+            cd /var/www/kitab/kitab-api # <--- UPDATE THIS TO YOUR ACTUAL SERVER PATH
             
             # Pull latest changes
             git pull origin main
