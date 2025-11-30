@@ -174,7 +174,9 @@ module.exports = (models, router) => {
   userRouter.post("/user/google-auth", async (req, res) => {
     const t = await sequelize.transaction();
     try {
-      const { idToken } = req.body;
+      console.log("Google Auth Request Body:", JSON.stringify(req.body, null, 2));
+      const idToken = req.body.idToken || req.body?.data?.idToken;
+
       if (!idToken) {
         await t.rollback();
         return warning(res, "Google ID token is required", MessageType.Warning);
