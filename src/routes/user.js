@@ -8,7 +8,7 @@ const fs = require("fs");
 const multer = require("multer");
 const path = require("path");
 const { OAuth2Client } = require("google-auth-library");
-const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+const client = new OAuth2Client("1061077670326-7ng30cuvgbdbu1c7cbdmqrv4fslp8gpb.apps.googleusercontent.com");
 
 
 const storage = multer.diskStorage({
@@ -185,7 +185,7 @@ module.exports = (models, router) => {
       // Verify Google Token
       const ticket = await client.verifyIdToken({
         idToken,
-        audience: process.env.GOOGLE_CLIENT_ID,
+        audience: "1061077670326-7ng30cuvgbdbu1c7cbdmqrv4fslp8gpb.apps.googleusercontent.com",
       });
       const payload = ticket.getPayload();
       const { sub: googleId, email, name, picture } = payload;
