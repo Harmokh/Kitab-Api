@@ -7,6 +7,8 @@ const jwt = require("jsonwebtoken");
 const fs = require("fs");
 const multer = require("multer");
 const path = require("path");
+const { OAuth2Client } = require("google-auth-library");
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -164,6 +166,106 @@ module.exports = (models, router) => {
       await t.rollback();
       console.error("Login error:", err);
       return error(res, err.message || "Login failed");
+    }
+  });
+
+  // 🌐 Google Auth (Login/Signup)
+  userRouter.post("/user/google-auth", async (req, res) => {
+    const t = await sequelize.transaction();
+    try {
+      const { idToken } = req.body;
+      if (!idToken) {
+        await t.rollback();
+        return warning(res, "Google ID token is required", MessageType.Warning);
+      }
+
+      // Verify Google Token
+      const ticket = await client.verifyIdToken({
+        idToken,
+        audience: process.env.GOOGLE_CLIENT_ID,
+      });
+      const payload = ticket.getPayload();
+      const { sub: googleId, email, name, picture } = payload;
+
+      if (!email) {
+        await t.rollback();
+        return warning(res, "Email not found in Google token", MessageType.Warning);
+      }
+
+      // Check if user exists
+      let userRecord = await models.User.findOne({
+        where: { email },
+        include: [{ model: models.Role, as: "Role" }],
+        transaction: t,
+      });
+
+      if (userRecord) {
+        // Update Google ID if missing
+        if (!userRecord.googleId) {
+          await userRecord.update({ googleId }, { transaction: t });
+        }
+      } else {
+        // Create new user
+        // Generate random password hash since it's required
+        const randomPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8);
+        const passwordHash = await hashPassword(randomPassword);
+
+        // Get default role (assuming 'User' role exists with ID 2 or similar, but safer to query)
+        // For now, let's assume roleId 2 is User, or query for it.
+        // Better to query for 'User' role.
+        const userRole = await models.Role.findOne({ where: { name: "User" }, transaction: t });
+        const roleId = userRole ? userRole.id : 2; // Default to 2 if not found, or handle error
+
+        userRecord = await models.User.create(
+          {
+            name,
+            email,
+            image: picture,
+            googleId,
+            passwordHash,
+            roleId,
+            isVerified: true, // Google verified
+          },
+          { transaction: t }
+        );
+
+        // Fetch again to include Role
+        userRecord = await models.User.findByPk(userRecord.id, {
+          include: [{ model: models.Role, as: "Role" }],
+          transaction: t,
+        });
+      }
+
+      // Generate JWT
+      const token = jwt.sign(
+        {
+          id: userRecord.id,
+          roleId: userRecord.roleId,
+          email: userRecord.email,
+        },
+        process.env.JWT_SECRET,
+        { expiresIn: process.env.JWT_EXPIRES_IN }
+      );
+
+      // Record Session
+      await models.UserSession.create(
+        {
+          userId: userRecord.id,
+          loginTime: new Date(),
+          ipAddress: req.ip || req.headers["x-forwarded-for"] || null,
+          userAgent: req.headers["user-agent"] || null,
+          isActive: true,
+        },
+        { transaction: t }
+      );
+
+      await t.commit();
+      return success(res, { token, user: userRecord }, "Google authentication successful");
+
+    } catch (err) {
+      await t.rollback();
+      console.error("Google Auth error:", err);
+      return error(res, err.message || "Google authentication failed");
     }
   });
 
