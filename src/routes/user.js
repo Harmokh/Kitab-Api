@@ -284,5 +284,78 @@ module.exports = (models, router) => {
     }
   });
 
+  // 🖼️ Upload Profile Image
+  const fs = require("fs");
+  const multer = require("multer");
+  const path = require("path");
+
+  const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+      const dir = "./public/profile_images";
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      cb(null, dir);
+    },
+    filename: function (req, file, cb) {
+      const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+      cb(null, uniqueSuffix + path.extname(file.originalname));
+    },
+  });
+
+  const upload = multer({ storage: storage });
+
+  userRouter.post(
+    "/user/upload-image",
+    authenticate,
+    upload.single("image"),
+    async (req, res) => {
+      try {
+        if (!req.file) {
+          return warning(res, "No image file provided", MessageType.Warning);
+        }
+
+        const userId = req.user.id;
+        const userRecord = await models.User.findOne({ where: { id: userId } });
+
+        if (!userRecord) {
+          // Clean up uploaded file if user not found
+          fs.unlinkSync(req.file.path);
+          return warning(res, "User not found", MessageType.Warning);
+        }
+
+        // Delete old image if exists and is local
+        if (
+          userRecord.image &&
+          userRecord.image.startsWith("/profile_images/")
+        ) {
+          const oldPath = path.join("./public", userRecord.image);
+          if (fs.existsSync(oldPath)) {
+            fs.unlinkSync(oldPath);
+          }
+        }
+
+        const imagePath = "/profile_images/" + req.file.filename;
+        await userRecord.update({ image: imagePath });
+
+        // Return full URL if needed, or just the relative path
+        // Assuming client constructs URL or we use a helper
+        // For consistency with other parts, we might want to return full URL if env var is set
+        // But the model stores the relative path usually or full path?
+        // Looking at document.js, it seems to store relative path often but returns full URL.
+        // Let's return the updated user object.
+
+        return success(
+          res,
+          { ...userRecord.toJSON(), image: imagePath },
+          "Profile image updated successfully"
+        );
+      } catch (err) {
+        console.error("Upload error:", err);
+        return error(res, err.message);
+      }
+    }
+  );
+
   return userRouter;
 };
