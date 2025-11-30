@@ -4,6 +4,25 @@ const { Op } = require("sequelize");
 const { sequelize } = require("../models/models");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
+const fs = require("fs");
+const multer = require("multer");
+const path = require("path");
+
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const dir = "./public/profile_images";
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    cb(null, dir);
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  },
+});
+
+const upload = multer({ storage: storage });
 
 module.exports = (models, router) => {
   const userRouter = router.Router();
@@ -285,25 +304,6 @@ module.exports = (models, router) => {
   });
 
   // 🖼️ Upload Profile Image
-  const fs = require("fs");
-  const multer = require("multer");
-  const path = require("path");
-
-  const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-      const dir = "./public/profile_images";
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-      cb(null, dir);
-    },
-    filename: function (req, file, cb) {
-      const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-      cb(null, uniqueSuffix + path.extname(file.originalname));
-    },
-  });
-
-  const upload = multer({ storage: storage });
 
   userRouter.post(
     "/user/upload-image",
