@@ -216,6 +216,123 @@ module.exports = (models, router) => {
       return error(res, err.message);
     }
   });
+  // 🔍 Get All Books with User's Bookmarks (Optimized Query)
+  // GET /bookmark/getallgrouped
+  bookmarkRouter.get(
+    "/bookmark/getallgroupedforuser",
+    authenticate,
+    async (req, res) => {
+      try {
+        const { pageSize = 20, currentPage = 1 } = req.query;
+
+        const size = parseInt(pageSize);
+        const page = parseInt(currentPage);
+
+        // Step 1: First get all bookmarks for this user with their book/version info
+        const userBookmarks = await models.Bookmark.findAll({
+          where: {
+            userId: req.user.id,
+            isDeleted: false
+          },
+          include: [
+            {
+              model: models.BookVersion,
+              as: "BookVersion",
+              attributes: ["id", "versionName", "pdfPath", "image", "bookId"],
+              required: true,
+              include: [
+                {
+                  model: models.Book,
+                  as: "Book",
+                  attributes: ["id", "title", "coverImage", "author", "description"],
+                  required: true
+                }
+              ]
+            }
+          ],
+          order: [
+            [{ model: models.BookVersion, as: "BookVersion" }, { model: models.Book, as: "Book" }, "title", "ASC"],
+            ["bookVersionId", "ASC"],
+            ["pageNumber", "ASC"]
+          ]
+        });
+
+        // Step 2: Group bookmarks by Book → Version → Bookmarks
+        const groupedData = {};
+
+        userBookmarks.forEach(bookmark => {
+          const book = bookmark.BookVersion.Book;
+          const version = bookmark.BookVersion;
+
+          // Initialize book if not exists
+          if (!groupedData[book.id]) {
+            groupedData[book.id] = {
+              id: book.id,
+              title: book.title,
+              coverImage: book.coverImage,
+              author: book.author,
+              description: book.description,
+              versions: {}
+            };
+          }
+
+          // Initialize version if not exists
+          if (!groupedData[book.id].versions[version.id]) {
+            groupedData[book.id].versions[version.id] = {
+              id: version.id,
+              versionName: version.versionName,
+              pdfPath: version.pdfPath,
+              image: version.image,
+              bookId: version.bookId,
+              bookmarks: []
+            };
+          }
+
+          // Add bookmark to version
+          groupedData[book.id].versions[version.id].bookmarks.push({
+            id: bookmark.id,
+            pageNumber: bookmark.pageNumber,
+            note: bookmark.note,
+            createdAt: bookmark.CreatedAt,
+            updatedAt: bookmark.UpdatedAt
+          });
+        });
+
+        // Step 3: Convert to array format
+        const booksArray = Object.values(groupedData).map(book => ({
+          ...book,
+          versions: Object.values(book.versions).map(version => ({
+            ...version,
+            bookmarkCount: version.bookmarks.length
+          })),
+          totalBookmarks: Object.values(book.versions).reduce(
+            (sum, version) => sum + version.bookmarks.length, 0
+          )
+        }));
+
+        // Step 4: Apply pagination
+        const startIndex = (page - 1) * size;
+        const endIndex = startIndex + size;
+        const paginatedBooks = booksArray.slice(startIndex, endIndex);
+
+        return success(
+          res,
+          {
+            totalBooksWithBookmarks: booksArray.length,
+            pageSize: size,
+            currentPage: page,
+            totalPages: Math.ceil(booksArray.length / size),
+            hasMore: endIndex < booksArray.length,
+            data: paginatedBooks,
+          },
+          "All books with user's bookmarks fetched successfully"
+        );
+      } catch (err) {
+        console.error("Error in getallgrouped:", err);
+        return error(res, err.message);
+      }
+    }
+  );
 
   return bookmarkRouter;
 };
