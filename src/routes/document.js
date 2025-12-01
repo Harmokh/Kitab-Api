@@ -55,7 +55,12 @@ var routes = (models, router) => {
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir);
       }
-      var uploadsingle = multer({ storage: storage }).single("file");
+      var uploadsingle = multer({
+        storage: storage,
+        limits: {
+          fileSize: 1024 * 1024 * 1000, // 5MB limit
+        },
+      }).single("file");
       uploadsingle(req, res, function (err) {
         if (req.fileValidationError) {
           return res.send(req.fileValidationError);
@@ -152,10 +157,10 @@ var routes = (models, router) => {
             required: !!uploadedBy,
             where: uploadedBy
               ? {
-                  fullName: {
-                    [Op.iLike]: `%${uploadedBy}%`,
-                  },
-                }
+                fullName: {
+                  [Op.iLike]: `%${uploadedBy}%`,
+                },
+              }
               : undefined,
           },
           {
@@ -165,10 +170,10 @@ var routes = (models, router) => {
             required: !!attachmentType,
             where: attachmentType
               ? {
-                  name: {
-                    [Op.iLike]: `%${attachmentType}%`,
-                  },
-                }
+                name: {
+                  [Op.iLike]: `%${attachmentType}%`,
+                },
+              }
               : undefined,
           },
         ];
