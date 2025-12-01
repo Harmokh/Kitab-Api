@@ -142,12 +142,12 @@ module.exports = (models, router) => {
           where:
             query && query.trim() !== ""
               ? {
-                  [Op.or]: [
-                    { versionName: { [Op.iLike]: `%${query}%` } },
-                    { isbn: { [Op.iLike]: `%${query}%` } },
-                    { description: { [Op.iLike]: `%${query}%` } },
-                  ],
-                }
+                [Op.or]: [
+                  { versionName: { [Op.iLike]: `%${query}%` } },
+                  { isbn: { [Op.iLike]: `%${query}%` } },
+                  { description: { [Op.iLike]: `%${query}%` } },
+                ],
+              }
               : undefined, // Don't filter if query is empty
         },
       ];
@@ -333,6 +333,73 @@ module.exports = (models, router) => {
       return error(res, err.message);
     }
   });
+  bookRouter.get("/book/version/newgetpages", async (req, res) => {
+    try {
+      const { versionId, startPage = 1, endPage } = req.query;
+
+      if (!versionId)
+        return res
+          .status(400)
+          .json({ success: false, message: "versionId is required" });
+
+      const version = await models.BookVersion.findByPk(versionId);
+      if (!version)
+        return res
+          .status(404)
+          .json({ success: false, message: "Book version not found" });
+
+      const pdfPath = path.join(rootDir, "public", version.pdfPath);
+      if (!fs.existsSync(pdfPath))
+        return res
+          .status(404)
+          .json({ success: false, message: "PDF file not found" });
+
+      const pdfDoc = await PDFDocument.load(fs.readFileSync(pdfPath));
+      const totalPages = pdfDoc.getPageCount();
+
+      const start = parseInt(startPage);
+      const end = endPage ? parseInt(endPage) : start;
+
+      if (start < 1 || end > totalPages || start > end)
+        return res.status(400).json({
+          success: false,
+          message: `Page range must be between 1 and ${totalPages}`,
+        });
+
+      const newPdfDoc = await PDFDocument.create();
+      const pagesToCopy = Array.from(
+        { length: end - start + 1 },
+        (_, i) => start - 1 + i
+      );
+
+      const copiedPages = await newPdfDoc.copyPages(pdfDoc, pagesToCopy);
+      copiedPages.forEach((page) => newPdfDoc.addPage(page));
+
+      const pdfBytes = await newPdfDoc.save();
+
+      // ---------- SEND TOTAL PAGES IN HEADER ----------
+      res.setHeader("X-Total-Pages", totalPages);
+      // You can use any custom header (X- prefix recommended)
+
+      // ---------- SEND PDF AS RESPONSE BODY ----------
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader(
+        "Content-Disposition",
+        `inline; filename=pages-${start}-${end}.pdf`
+      );
+
+      res.send(Buffer.from(pdfBytes));
+
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({
+        success: false,
+        message: err.message || "Error fetching PDF pages",
+      });
+    }
+  });
+
+
 
   return bookRouter;
 };
