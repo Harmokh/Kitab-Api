@@ -44,19 +44,132 @@ module.exports = (models, router) => {
     // 🔔 Send Notification (For testing/admin purposes)
     notificationRouter.post("/notifications/send", authenticate, async (req, res) => {
         try {
-            const { userId, title, body, data } = req.body;
+            const { userId, title, body, data, type } = req.body;
 
             if (!userId || !title || !body) {
                 return warning(res, "UserId, title, and body are required", MessageType.Warning);
             }
 
-            const result = await notificationService.sendToUser(userId, { title, body }, data);
+            const result = await notificationService.sendToUser(userId, { title, body }, data, type);
 
             if (result.success) {
-                return success(res, result, "Notification sent successfully");
+                return success(res, result, "Notification processed successfully");
             } else {
                 return error(res, result.error || result.message || "Failed to send notification");
             }
+        } catch (err) {
+            return error(res, err.message);
+        }
+    });
+
+    // 📥 Get All Notifications for User (Paginated)
+    notificationRouter.get("/notifications/getall", authenticate, async (req, res) => {
+        try {
+            const { pageSize = 20, currentPage = 1 } = req.query;
+            const size = parseInt(pageSize);
+            const page = parseInt(currentPage);
+
+            const result = await models.Notification.findAndCountAll({
+                where: {
+                    userId: req.user.id,
+                    isDeleted: false
+                },
+                limit: size,
+                offset: (page - 1) * size,
+                order: [["CreatedAt", "DESC"]]
+            });
+
+            return success(
+                res,
+                {
+                    totalNotifications: result.count,
+                    pageSize: size,
+                    currentPage: page,
+                    totalPages: Math.ceil(result.count / size),
+                    hasMore: (page * size) < result.count,
+                    data: result.rows,
+                },
+                "Notifications fetched successfully"
+            );
+        } catch (err) {
+            return error(res, err.message);
+        }
+    });
+
+    // ✅ Mark Notification as Read
+    notificationRouter.put("/notifications/mark-read", authenticate, async (req, res) => {
+        try {
+            const { notificationId, markAll } = req.body;
+
+            if (markAll) {
+                await models.Notification.update(
+                    { isRead: true },
+                    {
+                        where: {
+                            userId: req.user.id,
+                            isRead: false,
+                            isDeleted: false
+                        }
+                    }
+                );
+                return success(res, null, "All notifications marked as read");
+            }
+
+            if (!notificationId) {
+                return warning(res, "notificationId is required", MessageType.Warning);
+            }
+
+            const notification = await models.Notification.findOne({
+                where: { id: notificationId, userId: req.user.id }
+            });
+
+            if (!notification) {
+                return warning(res, "Notification not found", MessageType.Warning);
+            }
+
+            await notification.update({ isRead: true });
+            return success(res, null, "Notification marked as read");
+        } catch (err) {
+            return error(res, err.message);
+        }
+    });
+
+    // 🗑️ Delete Notification (Soft Delete)
+    notificationRouter.delete("/notifications/delete", authenticate, async (req, res) => {
+        try {
+            const { notificationId } = req.query;
+
+            if (!notificationId) {
+                return warning(res, "notificationId is required", MessageType.Warning);
+            }
+
+            const notification = await models.Notification.findOne({
+                where: { id: notificationId, userId: req.user.id }
+            });
+
+            if (!notification) {
+                return warning(res, "Notification not found", MessageType.Warning);
+            }
+
+            await notification.update({ isDeleted: true });
+            return success(res, null, "Notification deleted successfully");
+        } catch (err) {
+            return error(res, err.message);
+        }
+    });
+
+    // 🔢 Get Unread Count
+    notificationRouter.get("/notifications/unread-count", authenticate, async (req, res) => {
+        try {
+            const count = await models.Notification.count({
+                where: {
+                    userId: req.user.id,
+                    isRead: false,
+                    isDeleted: false
+                }
+            });
+
+            return success(res, { count }, "Unread count fetched successfully");
         } catch (err) {
             return error(res, err.message);
         }

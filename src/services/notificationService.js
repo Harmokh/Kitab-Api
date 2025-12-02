@@ -1,5 +1,5 @@
 const admin = require("firebase-admin");
-const { UserDevice } = require("../models/models");
+const { UserDevice, Notification } = require("../models/models");
 
 let isInitialized = false;
 
@@ -70,8 +70,31 @@ const notificationService = {
      * @param {object} notification - { title, body }
      * @param {object} data - Custom data payload
      */
-    sendToUser: async (userId, notification, data = {}) => {
-        if (!isInitialized) return { success: false, error: "Firebase not initialized" };
+    sendToUser: async (userId, notification, data = {}, type = 'general') => {
+        // 1. Persist to Database
+        let savedNotification = null;
+        try {
+            savedNotification = await Notification.create({
+                userId,
+                title: notification.title,
+                body: notification.body,
+                data,
+                type,
+                isRead: false
+            });
+        } catch (dbError) {
+            console.error("Error saving notification to DB:", dbError);
+            // We continue to send push even if DB save fails, or we could return error.
+            // For now, let's log and continue, but ideally we want both.
+        }
+
+        if (!isInitialized) {
+            return {
+                success: true, // We consider it success if saved to DB, even if push fails (or is disabled)
+                savedNotification,
+                message: "Notification saved to DB. Firebase not initialized for push."
+            };
+        }
 
         try {
             const devices = await UserDevice.findAll({
@@ -79,7 +102,11 @@ const notificationService = {
             });
 
             if (!devices || devices.length === 0) {
-                return { success: false, message: "No active devices found for user" };
+                return {
+                    success: true,
+                    savedNotification,
+                    message: "Notification saved to DB. No active devices found for push."
+                };
             }
 
             const tokens = devices.map((d) => d.token);
@@ -87,7 +114,7 @@ const notificationService = {
             // Multicast message
             const message = {
                 notification,
-                data,
+                data: { ...data, notificationId: savedNotification ? savedNotification.id : "" }, // Include ID in payload
                 tokens,
             };
 
@@ -108,10 +135,10 @@ const notificationService = {
                 console.log('List of tokens that caused failures: ' + failedTokens);
             }
 
-            return { success: true, response };
+            return { success: true, response, savedNotification };
         } catch (error) {
             console.error("Error sending to user:", error);
-            return { success: false, error };
+            return { success: false, error, savedNotification };
         }
     },
 };
