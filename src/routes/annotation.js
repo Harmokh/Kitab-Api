@@ -167,5 +167,127 @@ module.exports = (models, router) => {
         }
     });
 
+    // 🔍 Get All Books with User's Annotations (Grouped)
+    // GET /annotation/getallgroupedforuser
+    annotationRouter.get(
+        "/annotation/getallgroupedforuser",
+        authenticate,
+        async (req, res) => {
+            try {
+                const { pageSize = 20, currentPage = 1 } = req.query;
+
+                const size = parseInt(pageSize);
+                const page = parseInt(currentPage);
+
+                // Step 1: First get all annotations for this user with their book/version info
+                const userAnnotations = await models.Annotation.findAll({
+                    where: {
+                        userId: req.user.id,
+                        isDeleted: false
+                    },
+                    include: [
+                        {
+                            model: models.BookVersion,
+                            as: "BookVersion",
+                            attributes: ["id", "versionName", "pdfPath", "image", "bookId"],
+                            required: true,
+                            include: [
+                                {
+                                    model: models.Book,
+                                    as: "Book",
+                                    attributes: ["id", "title", "coverImage", "author", "description"],
+                                    required: true
+                                }
+                            ]
+                        }
+                    ],
+                    order: [
+                        [{ model: models.BookVersion, as: "BookVersion" }, { model: models.Book, as: "Book" }, "title", "ASC"],
+                        ["versionId", "ASC"],
+                        ["pageNumber", "ASC"]
+                    ]
+                });
+
+                // Step 2: Group annotations by Book → Version → Annotations
+                const groupedData = {};
+
+                userAnnotations.forEach(annotation => {
+                    const book = annotation.BookVersion.Book;
+                    const version = annotation.BookVersion;
+
+                    // Initialize book if not exists
+                    if (!groupedData[book.id]) {
+                        groupedData[book.id] = {
+                            id: book.id,
+                            title: book.title,
+                            coverImage: book.coverImage,
+                            author: book.author,
+                            description: book.description,
+                            versions: {}
+                        };
+                    }
+
+                    // Initialize version if not exists
+                    if (!groupedData[book.id].versions[version.id]) {
+                        groupedData[book.id].versions[version.id] = {
+                            id: version.id,
+                            versionName: version.versionName,
+                            pdfPath: version.pdfPath,
+                            image: version.image,
+                            bookId: version.bookId,
+                            annotations: []
+                        };
+                    }
+
+                    // Add annotation to version
+                    groupedData[book.id].versions[version.id].annotations.push({
+                        id: annotation.id,
+                        pageNumber: annotation.pageNumber,
+                        text: annotation.text,
+                        type: annotation.type,
+                        rect: annotation.rect,
+                        color: annotation.color,
+                        content: annotation.content,
+                        createdAt: annotation.CreatedAt,
+                        updatedAt: annotation.UpdatedAt
+                    });
+                });
+
+                // Step 3: Convert to array format
+                const booksArray = Object.values(groupedData).map(book => ({
+                    ...book,
+                    versions: Object.values(book.versions).map(version => ({
+                        ...version,
+                        annotationCount: version.annotations.length
+                    })),
+                    totalAnnotations: Object.values(book.versions).reduce(
+                        (sum, version) => sum + version.annotations.length, 0
+                    )
+                }));
+
+                // Step 4: Apply pagination
+                const startIndex = (page - 1) * size;
+                const endIndex = startIndex + size;
+                const paginatedBooks = booksArray.slice(startIndex, endIndex);
+
+                return success(
+                    res,
+                    {
+                        totalBooksWithAnnotations: booksArray.length,
+                        pageSize: size,
+                        currentPage: page,
+                        totalPages: Math.ceil(booksArray.length / size),
+                        hasMore: endIndex < booksArray.length,
+                        data: paginatedBooks,
+                    },
+                    "All books with user's annotations fetched successfully"
+                );
+            } catch (err) {
+                console.error("Error in getallgroupedforuser:", err);
+                return error(res, err.message);
+            }
+        }
+    );
+
     return annotationRouter;
 };
