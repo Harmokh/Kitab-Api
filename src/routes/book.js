@@ -8,7 +8,6 @@ const { PDFDocument } = require("pdf-lib");
 const rootDir = path.resolve(__dirname, "../../");
 module.exports = (models, router) => {
   const bookRouter = router.Router();
-
   // POST /book/save
   bookRouter.post("/book/save", authenticate, async (req, res) => {
     const {
@@ -24,61 +23,94 @@ module.exports = (models, router) => {
       const savedBook = await models.sequelize.transaction(async (t) => {
         let bookRecord;
 
+        // ======================================================
+        // 🔹 1. UPDATE BOOK OR CREATE NEW
+        // ======================================================
         if (id) {
-          // 🔹 Update existing Book
           bookRecord = await models.Book.findByPk(id, { transaction: t });
           if (bookRecord) {
             await bookRecord.update(
               { title, coverImage, description, author },
               { transaction: t }
             );
-
-            // 🔹 Remove old versions before inserting new ones
-            await models.BookVersion.destroy({
-              where: { bookId: id },
-              transaction: t,
-            });
           }
         }
 
         if (!bookRecord) {
-          // 🔹 Create new Book
           bookRecord = await models.Book.create(
             { title, coverImage, description, author },
             { transaction: t }
           );
         }
 
-        // 🔹 Create new BookVersions if provided
-        if (versions.length > 0) {
-          // Validate unique ISBNs before insert
-          const isbnList = versions.map((v) => v.isbn).filter(Boolean);
-          if (isbnList.length > 0) {
-            const existingIsbn = await models.BookVersion.findOne({
-              where: { isbn: isbnList },
-              transaction: t,
-            });
-            if (existingIsbn) throw new Error("ISBN must be unique");
-          }
+        // ======================================================
+        // 🔹 2. SYNC BOOK VERSIONS (Update / Insert / Delete)
+        // ======================================================
 
-          const versionRecords = versions.map((v) => ({
-            versionName: v.versionName,
-            pdfPath: v.pdfPath,
-            bookId: bookRecord.id,
-            author: v.author,
-            description: v.description,
-            publishedYear: v.publishedYear,
-            isbn: v.isbn,
-            image: v.image,
-            uploadedBy: v.uploadedBy,
-          }));
+        // 2.a Existing version IDs from DB
+        const existingVersionRecords = await models.BookVersion.findAll({
+          where: { bookId: bookRecord.id },
+          transaction: t,
+        });
 
-          await models.BookVersion.bulkCreate(versionRecords, {
+        const existingVersionIds = existingVersionRecords.map((v) => v.id);
+
+        // 2.b Version IDs coming from request (only those having id)
+        const incomingVersionIds = versions
+          .filter((v) => v.id)
+          .map((v) => v.id);
+
+        // 2.c DELETE VERSIONS REMOVED IN UI
+        const versionsToDelete = existingVersionIds.filter(
+          (oldId) => !incomingVersionIds.includes(oldId)
+        );
+
+        if (versionsToDelete.length > 0) {
+          await models.BookVersion.destroy({
+            where: { id: versionsToDelete },
             transaction: t,
           });
         }
 
-        // 🔹 Return full Book with Versions
+        // 2.d PROCESS EACH VERSION
+        for (const v of versions) {
+          if (v.id) {
+            // 🔄 UPDATE EXISTING VERSION
+            await models.BookVersion.update(
+              {
+                versionName: v.versionName,
+                pdfPath: v.pdfPath,
+                author: v.author,
+                description: v.description,
+                publishedYear: v.publishedYear,
+                isbn: v.isbn,
+                image: v.image,
+                uploadedBy: v.uploadedBy,
+              },
+              { where: { id: v.id }, transaction: t }
+            );
+          } else {
+            // ➕ INSERT NEW VERSION
+            await models.BookVersion.create(
+              {
+                versionName: v.versionName,
+                pdfPath: v.pdfPath,
+                bookId: bookRecord.id,
+                author: v.author,
+                description: v.description,
+                publishedYear: v.publishedYear,
+                isbn: v.isbn,
+                image: v.image,
+                uploadedBy: v.uploadedBy,
+              },
+              { transaction: t }
+            );
+          }
+        }
+
+        // ======================================================
+        // 🔹 3. RETURN FULL BOOK WITH VERSIONS
+        // ======================================================
         return models.Book.findByPk(bookRecord.id, {
           include: [{ model: models.BookVersion, as: "Versions" }],
           transaction: t,
@@ -91,9 +123,6 @@ module.exports = (models, router) => {
         id ? "Book updated successfully" : "Book created successfully"
       );
     } catch (err) {
-      if (err.message === "ISBN must be unique") {
-        return warning(res, err.message, MessageType.Warning);
-      }
       console.error(err);
       return error(
         res,
@@ -142,12 +171,12 @@ module.exports = (models, router) => {
           where:
             query && query.trim() !== ""
               ? {
-                [Op.or]: [
-                  { versionName: { [Op.iLike]: `%${query}%` } },
-                  { isbn: { [Op.iLike]: `%${query}%` } },
-                  { description: { [Op.iLike]: `%${query}%` } },
-                ],
-              }
+                  [Op.or]: [
+                    { versionName: { [Op.iLike]: `%${query}%` } },
+                    { isbn: { [Op.iLike]: `%${query}%` } },
+                    { description: { [Op.iLike]: `%${query}%` } },
+                  ],
+                }
               : undefined, // Don't filter if query is empty
         },
       ];
@@ -184,10 +213,7 @@ module.exports = (models, router) => {
   bookRouter.delete("/book/delete", authenticate, async (req, res) => {
     try {
       const { id } = req.query;
-      const [updated] = await models.Book.update(
-        { isDeleted: true, isActive: false },
-        { where: { id } }
-      );
+      const updated = await models.Book.destroy({ where: { id } });
 
       if (updated) return success(res, null, "Book deleted successfully");
       else return warning(res, "Book not found", MessageType.Warning);
@@ -389,7 +415,6 @@ module.exports = (models, router) => {
       );
 
       res.send(Buffer.from(pdfBytes));
-
     } catch (err) {
       console.error(err);
       res.status(500).json({
@@ -398,8 +423,6 @@ module.exports = (models, router) => {
       });
     }
   });
-
-
 
   return bookRouter;
 };

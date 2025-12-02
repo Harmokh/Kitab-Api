@@ -35,23 +35,28 @@ module.exports = (sequelize, Sequelize) => {
       foreignKey: "bookId",
       targetKey: "id",
       as: "Book",
+      onDelete: "CASCADE",
     });
     BookVersion.belongsTo(models.User, {
       foreignKey: "uploadedBy",
       targetKey: "id",
       as: "Uploader",
+      onDelete: "CASCADE",
     });
     BookVersion.hasMany(models.Bookmark, {
       foreignKey: "bookVersionId",
       as: "Bookmarks",
+      onDelete: "CASCADE",
     });
     BookVersion.hasMany(models.UserEngagement, {
       foreignKey: "bookVersionId",
       as: "Engagements",
+      onDelete: "CASCADE",
     });
     BookVersion.hasMany(models.Favorite, {
       foreignKey: "bookVersionId",
       as: "Favorites",
+      onDelete: "CASCADE",
     });
   };
 
