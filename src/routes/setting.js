@@ -86,7 +86,8 @@ module.exports = (models, router) => {
         
         <p>Your continued use of our website will be regarded as acceptance of our practices around privacy and personal information. If you have any questions about how we handle user data and personal information, feel free to contact us.</p>
       `;
-            res.send(getHtmlTemplate("Privacy Policy", content));
+            const htmlContent = getHtmlTemplate("Privacy Policy", content);
+            return success(res, htmlContent, "Privacy Policy fetched successfully");
         } catch (err) {
             return error(res, err.message);
         }
@@ -121,7 +122,8 @@ module.exports = (models, router) => {
         <h2>5. Accuracy of Materials</h2>
         <p>The materials appearing on Kitab's website could include technical, typographical, or photographic errors. Kitab does not warrant that any of the materials on its website are accurate, complete or current. Kitab may make changes to the materials contained on its website at any time without notice. However Kitab does not make any commitment to update the materials.</p>
       `;
-            res.send(getHtmlTemplate("Terms and Conditions", content));
+            const htmlContent = getHtmlTemplate("Terms and Conditions", content);
+            return success(res, htmlContent, "Terms and Conditions fetched successfully");
         } catch (err) {
             return error(res, err.message);
         }
