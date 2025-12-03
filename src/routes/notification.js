@@ -163,7 +163,7 @@ module.exports = (models, router) => {
         try {
             const count = await models.Notification.count({
                 where: {
-                    UserId: req.user.id,
+                    userId: req.user.id,
                     isRead: false,
                     isDeleted: false
                 }
