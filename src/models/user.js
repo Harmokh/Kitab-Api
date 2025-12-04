@@ -92,7 +92,9 @@ module.exports = (sequelize, Sequelize) => {
     });
     User.hasMany(models.UserSession, { foreignKey: "userId", as: "Sessions" });
     User.hasMany(models.UserDevice, { foreignKey: "userId", as: "Devices" });
+    User.hasMany(models.Notification, { foreignKey: "userId", as: "Notifications" });
   };
+
 
   return User;
 };
