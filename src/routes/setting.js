@@ -169,29 +169,31 @@ module.exports = (models, router) => {
     }
   });
 
-  // 📄 About Us
   settingRouter.get("/setting/aboutus", (req, res) => {
     try {
       const content = `
-        <p><strong>Faydhaane Yusufi</strong> is a platform developed under <strong>Azhar Academy</strong>, designed to bring beneficial content, knowledge resources, and a seamless user experience.</p>
+      <p><strong>Faydhaane Yusufi</strong> is an innovative platform developed under <strong>Azhar Academy</strong>, designed to provide users with educational and Islamic content in a seamless and user-friendly manner.</p>
 
-        <div class="highlight-box">
-          Our mission is to make knowledge accessible, well-organized, and beautifully presented for learners worldwide.
-        </div>
+      <div class="highlight-box">
+        Our mission is to make authentic knowledge accessible to everyone while respecting Islamic traditions.
+      </div>
 
-        <h2>Our Vision</h2>
-        <p>To provide a platform where spiritual, educational, and personal growth content is just a tap away.</p>
+      <h2>About Azhar Academy</h2>
+      <p><strong>Azhar Academy</strong> is a charitable organisation (Registered Charity Number: 1080849) founded in 1996 under the instruction and guidance of Shaykh al-Hadith Hazrat Maulana Yusuf Motala (Rahmatullah Alayh). The purpose of our charity is to provide Islamic and educational services and other charitable activities.</p>
 
-        <h2>Core Principles</h2>
-        <ul>
-          <li>Trust & Authenticity</li>
-          <li>Quality & Simplicity</li>
-          <li>User Privacy & Security</li>
-          <li>Continuous Improvement</li>
-        </ul>
+      <h2>Locations & Properties</h2>
+      <ul>
+        <li>235a Romford Road, E7 – AAGS and Azhar Masjid (purchased in 2000)</li>
+        <li>228a Romford Road, E7 – Offices and Madrasah (purchased in 2013)</li>
+        <li>470 Leytonstone High Road, E11 – AAPS and Nursery (purchased in 2011)</li>
+        <li>Tennyson Road, E15 4DR – purchased in 2021</li>
+      </ul>
 
-        <p>With the dedication of <strong>Azhar Academy</strong> and the development craftsmanship of <strong>Brimij Technologies Pvt. Ltd.</strong>, we strive to deliver the best experience to all users.</p>
-      `;
+      <h2>Our Vision</h2>
+      <p>We aim to deliver authentic knowledge in a digital format while continuing to grow our charitable and educational activities worldwide.</p>
+
+      <p>Faydhaane Yusufi brings together the works of Islamic scholars under the guidance of Azhar Academy, providing a reliable and beautiful learning platform.</p>
+    `;
       return success(res, getHtmlTemplate("About Us", content), "About Us fetched successfully");
     } catch (err) {
       return error(res, err.message);
@@ -202,18 +204,25 @@ module.exports = (models, router) => {
   settingRouter.get("/setting/contact", (req, res) => {
     try {
       const content = `
-        <p>Need help or have questions? We are here for you.</p>
+      <p>If you need help, have questions, or wish to support our charitable activities, you can contact us at:</p>
 
-        <h2>Contact Details</h2>
-        <ul>
-            <li><strong>Parent Company:</strong> Azhar Academy</li>
-            <li><strong>Email:</strong> support@faydhaaneyusufi.com</li>
-            <li><strong>Phone:</strong> +91 98765 43210</li>
-            <li><strong>Website:</strong> <a href="https://faydhaaneyusufi.com" target="_blank">faydhaaneyusufi.com</a></li>
-        </ul>
+      <h2>Azhar Academy Office</h2>
+      <ul>
+        <li>235a Romford Road, E7 – AAGS and Azhar Masjid</li>
+        <li>228a Romford Road, E7 – Offices and Madrasah</li>
+        <li>470 Leytonstone High Road, E11 – AAPS and Nursery</li>
+        <li>Tennyson Road, E15 4DR</li>
+      </ul>
 
-        <p>Our support team usually responds within 24 hours.</p>
-      `;
+      <h2>Contact Details</h2>
+      <ul>
+        <li><strong>Email:</strong> support@faydhaaneyusufi.com</li>
+        <li><strong>Phone:</strong> +91 98765 43210</li>
+        <li><strong>Website:</strong> <a href="https://faydhaaneyusufi.com" target="_blank">faydhaaneyusufi.com</a></li>
+      </ul>
+
+      <p>Our support team strives to respond within 24 hours.</p>
+    `;
       return success(res, getHtmlTemplate("Contact Us", content), "Contact Us fetched successfully");
     } catch (err) {
       return error(res, err.message);
