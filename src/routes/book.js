@@ -427,7 +427,7 @@ module.exports = (models, router) => {
   bookRouter.get("/book/recent", authenticate, async (req, res) => {
     try {
       const books = await models.Book.findAll({
-        limit: 4,
+        limit: 3,
         order: [["CreatedAt", "DESC"]],
       });
       return success(res, books, "Recent books fetched successfully");
