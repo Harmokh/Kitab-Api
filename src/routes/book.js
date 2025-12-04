@@ -428,7 +428,7 @@ module.exports = (models, router) => {
     try {
       const books = await models.Book.findAll({
         limit: 5,
-        order: [["createdAt", "DESC"]],
+        order: [["CreatedAt", "DESC"]],
       });
       return success(res, books, "Recent books fetched successfully");
     } catch (err) {
