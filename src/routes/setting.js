@@ -9,78 +9,132 @@ module.exports = (models, router) => {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>${title}</title>
+      <title>${title} - Faydhaane Yusufi</title>
+
       <style>
         body {
-          font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-          line-height: 1.6;
-          color: #333;
-          max-width: 800px;
+          font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+          line-height: 1.7;
+          color: #2d3436;
+          max-width: 900px;
           margin: 0 auto;
-          padding: 20px;
-          background-color: #f9f9f9;
+          padding: 30px;
+          background: #eef2f3;
         }
+
         .container {
-          background-color: #ffffff;
-          padding: 40px;
-          border-radius: 8px;
-          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+          background: #ffffff;
+          padding: 40px 50px;
+          border-radius: 12px;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+          border-top: 5px solid #2e86de;
         }
+
         h1 {
+          font-size: 32px;
           color: #2c3e50;
-          border-bottom: 2px solid #eee;
-          padding-bottom: 10px;
+          margin-bottom: 10px;
         }
+
         h2 {
+          margin-top: 30px;
+          margin-bottom: 10px;
           color: #34495e;
-          margin-top: 20px;
+          font-size: 22px;
         }
+
         p {
           margin-bottom: 15px;
+          font-size: 16px;
         }
+
         ul {
-          margin-bottom: 15px;
+          margin-top: 5px;
+          margin-bottom: 20px;
           padding-left: 20px;
         }
+
         li {
-          margin-bottom: 5px;
+          margin-bottom: 8px;
         }
+
+        .highlight-box {
+          background: #f1f7ff;
+          border-left: 4px solid #3498db;
+          padding: 12px 18px;
+          border-radius: 5px;
+          margin: 20px 0;
+        }
+
+        .parent-box {
+          background: #fff4d6;
+          border-left: 4px solid #f39c12;
+          padding: 12px 18px;
+          border-radius: 5px;
+          margin: 25px 0;
+        }
+
         .footer {
-          margin-top: 40px;
+          margin-top: 50px;
           text-align: center;
           font-size: 0.9em;
           color: #777;
+        }
+
+        .footer a {
+          color: #2e86de;
+          text-decoration: none;
         }
       </style>
     </head>
     <body>
       <div class="container">
         <h1>${title}</h1>
+
+        <div class="parent-box">
+          <strong>Faydhaane Yusufi</strong> — a project by <strong>Azhar Academy</strong>
+        </div>
+
         ${content}
+
         <div class="footer">
-          &copy; ${new Date().getFullYear()} Kitab. All rights reserved.
+          <hr style="border:0; border-top: 1px solid #eee; margin: 30px 0;">
+          &copy; ${new Date().getFullYear()} <strong>Azhar Academy</strong>. All rights reserved.<br/>
+          App built &amp; designed by 
+          <a href="https://brimij.com/" target="_blank">Brimij Technologies Pvt. Ltd.</a>
         </div>
       </div>
     </body>
     </html>
-    `;
+  `;
 
   // ================================================================
   // 📄 Privacy Policy
-  // GET /setting/privacy
-  // ================================================================
   settingRouter.get("/setting/privacy", (req, res) => {
     try {
       const content = `
-        <p>Your privacy is important to us. It is Kitab's policy to respect your privacy regarding any information we may collect from you across our website and other services.</p>
+        <p>Welcome to <strong>Faydhaane Yusufi</strong>. Your privacy matters to us. As part of 
+        <strong>Azhar Academy</strong>, we follow strict ethical and secure data-handling principles.</p>
+
+        <div class="highlight-box">
+          We respect your privacy and never sell, misuse, or share your personal data.
+        </div>
+
         <h2>1. Information We Collect</h2>
-        <p>We ask for personal information only when necessary and with your consent.</p>
-        <h2>2. How We Use Information</h2>
-        <p>Your data is used only to provide and improve our services.</p>
-        <h2>3. Sharing of Information</h2>
-        <p>We never share personal information publicly unless required by law.</p>
+        <p>We only collect the data necessary for improving your experience.</p>
+
+        <h2>2. How We Use Your Information</h2>
+        <p>Your data helps us improve app functionality, personalize your experience, and send relevant updates.</p>
+
+        <h2>3. Data Protection</h2>
+        <p>Your information is stored securely and is never shared with third parties except when required by law.</p>
+
         <h2>4. Your Rights</h2>
-        <p>You may choose to refuse data requests; however, some features may not work.</p>
+        <ul>
+          <li>Request access to your data</li>
+          <li>Request correction or deletion</li>
+          <li>Opt-out of non-essential tracking</li>
+        </ul>
       `;
       return success(res, getHtmlTemplate("Privacy Policy", content), "Privacy Policy fetched successfully");
     } catch (err) {
@@ -88,22 +142,26 @@ module.exports = (models, router) => {
     }
   });
 
-  // ================================================================
   // 📄 Terms & Conditions
-  // GET /setting/terms
-  // ================================================================
   settingRouter.get("/setting/terms", (req, res) => {
     try {
       const content = `
-        <p>Welcome to Kitab!</p>
-        <h2>1. Terms</h2>
-        <p>By using our app, you agree to these terms.</p>
-        <h2>2. Use License</h2>
-        <p>You may not copy, resell or modify our content.</p>
+        <p>By using <strong>Faydhaane Yusufi</strong>, a service brought to you by <strong>Azhar Academy</strong>, you agree to the following:</p>
+
+        <h2>1. Acceptance of Terms</h2>
+        <p>These terms govern your use of our app.</p>
+
+        <h2>2. Usage Restrictions</h2>
+        <ul>
+          <li>You may not copy, resell or redistribute content.</li>
+          <li>You must not misuse the app or attempt unauthorized access.</li>
+        </ul>
+
         <h2>3. Disclaimer</h2>
-        <p>All content is provided "as is" with no warranties.</p>
-        <h2>4. Limitations</h2>
-        <p>We are not responsible for any damages that may occur from using our service.</p>
+        <p>All services are provided "as-is". We do not guarantee uninterrupted availability.</p>
+
+        <h2>4. Liability & Limitations</h2>
+        <p>Azhar Academy and Brimij Technologies are not responsible for damages arising from misuse or third-party interference.</p>
       `;
       return success(res, getHtmlTemplate("Terms & Conditions", content), "Terms & Conditions fetched successfully");
     } catch (err) {
@@ -111,15 +169,28 @@ module.exports = (models, router) => {
     }
   });
 
-  // ================================================================
   // 📄 About Us
-  // GET /setting/aboutus
-  // ================================================================
   settingRouter.get("/setting/aboutus", (req, res) => {
     try {
       const content = `
-        <p>Kitab is an innovative platform built to provide users with a clean and efficient reading experience. Our goal is to make accessing books, notes, and annotations seamless and enjoyable.</p>
-        <p>We aim to simplify how users manage their reading materials and notifications, ensuring convenience and productivity.</p>
+        <p><strong>Faydhaane Yusufi</strong> is a platform developed under <strong>Azhar Academy</strong>, designed to bring beneficial content, knowledge resources, and a seamless user experience.</p>
+
+        <div class="highlight-box">
+          Our mission is to make knowledge accessible, well-organized, and beautifully presented for learners worldwide.
+        </div>
+
+        <h2>Our Vision</h2>
+        <p>To provide a platform where spiritual, educational, and personal growth content is just a tap away.</p>
+
+        <h2>Core Principles</h2>
+        <ul>
+          <li>Trust & Authenticity</li>
+          <li>Quality & Simplicity</li>
+          <li>User Privacy & Security</li>
+          <li>Continuous Improvement</li>
+        </ul>
+
+        <p>With the dedication of <strong>Azhar Academy</strong> and the development craftsmanship of <strong>Brimij Technologies Pvt. Ltd.</strong>, we strive to deliver the best experience to all users.</p>
       `;
       return success(res, getHtmlTemplate("About Us", content), "About Us fetched successfully");
     } catch (err) {
@@ -127,20 +198,21 @@ module.exports = (models, router) => {
     }
   });
 
-  // ================================================================
   // 📄 Contact Us
-  // GET /setting/contact
-  // ================================================================
   settingRouter.get("/setting/contact", (req, res) => {
     try {
       const content = `
-        <p>If you need help or have any questions, feel free to reach out to us:</p>
+        <p>Need help or have questions? We are here for you.</p>
+
+        <h2>Contact Details</h2>
         <ul>
-            <li><strong>Email:</strong> support@kitab.com</li>
+            <li><strong>Parent Company:</strong> Azhar Academy</li>
+            <li><strong>Email:</strong> support@faydhaaneyusufi.com</li>
             <li><strong>Phone:</strong> +91 98765 43210</li>
-            <li><strong>Website:</strong> www.kitab.com</li>
+            <li><strong>Website:</strong> <a href="https://faydhaaneyusufi.com" target="_blank">faydhaaneyusufi.com</a></li>
         </ul>
-        <p>We try our best to respond within 24 hours.</p>
+
+        <p>Our support team usually responds within 24 hours.</p>
       `;
       return success(res, getHtmlTemplate("Contact Us", content), "Contact Us fetched successfully");
     } catch (err) {
@@ -148,23 +220,23 @@ module.exports = (models, router) => {
     }
   });
 
-  // ================================================================
   // 📄 FAQ
-  // GET /setting/faq
-  // ================================================================
   settingRouter.get("/setting/faq", (req, res) => {
     try {
       const content = `
-        <h2>1. What is Kitab?</h2>
-        <p>Kitab is a reading and notification management platform.</p>
+        <h2>1. What is Faydhaane Yusufi?</h2>
+        <p>A platform by Azhar Academy delivering educational and spiritual content to users worldwide.</p>
 
-        <h2>2. Is Kitab free?</h2>
-        <p>Yes, Kitab is free to use.</p>
+        <h2>2. Is the app free?</h2>
+        <p>Yes — Faydhaane Yusufi is free to use for all users.</p>
 
-        <h2>3. How can I contact support?</h2>
-        <p>You can contact us using the information on the Contact Us page.</p>
+        <h2>3. How do I reach support?</h2>
+        <p>You can contact us via the Contact Us page. We aim to respond promptly.</p>
+
+        <h2>4. Is my data safe?</h2>
+        <p>Absolutely. We follow strict security practices and respect user privacy.</p>
       `;
-      return success(res, getHtmlTemplate("FAQs", content), "FAQ fetched successfully");
+      return success(res, getHtmlTemplate("Frequently Asked Questions", content), "FAQ fetched successfully");
     } catch (err) {
       return error(res, err.message);
     }
