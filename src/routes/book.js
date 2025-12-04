@@ -171,12 +171,12 @@ module.exports = (models, router) => {
           where:
             query && query.trim() !== ""
               ? {
-                  [Op.or]: [
-                    { versionName: { [Op.iLike]: `%${query}%` } },
-                    { isbn: { [Op.iLike]: `%${query}%` } },
-                    { description: { [Op.iLike]: `%${query}%` } },
-                  ],
-                }
+                [Op.or]: [
+                  { versionName: { [Op.iLike]: `%${query}%` } },
+                  { isbn: { [Op.iLike]: `%${query}%` } },
+                  { description: { [Op.iLike]: `%${query}%` } },
+                ],
+              }
               : undefined, // Don't filter if query is empty
         },
       ];
@@ -421,6 +421,18 @@ module.exports = (models, router) => {
         success: false,
         message: err.message || "Error fetching PDF pages",
       });
+    }
+  });
+  // 5 recently added books
+  bookRouter.get("/book/recent", authenticate, async (req, res) => {
+    try {
+      const books = await models.Book.findAll({
+        limit: 5,
+        order: [["createdAt", "DESC"]],
+      });
+      return success(res, books, "Recent books fetched successfully");
+    } catch (err) {
+      return error(res, err.message);
     }
   });
 
