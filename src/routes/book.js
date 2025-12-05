@@ -5,6 +5,7 @@ const Sequelize = require("sequelize");
 const path = require("path");
 const fs = require("fs");
 const { PDFDocument } = require("pdf-lib");
+const { sendToUser } = require("../services/notificationService");
 const rootDir = path.resolve(__dirname, "../../");
 module.exports = (models, router) => {
   const bookRouter = router.Router();
@@ -105,6 +106,18 @@ module.exports = (models, router) => {
               },
               { transaction: t }
             );
+
+            // send notification to all users about new version added
+            await sendNotificationOfBooktoAll(
+              "New Book Version Added",
+              `A new version "${v.versionName}" has been added for the book "${bookRecord.title}".`,
+              {
+                bookId: bookRecord.id,
+                versionName: v.versionName,
+                versionId: v.id,
+              },
+              "book_version_added"
+            );
           }
         }
 
@@ -186,6 +199,19 @@ module.exports = (models, router) => {
         include: includeClause,
         limit: parseInt(pageSize),
         offset: (parseInt(currentPage) - 1) * parseInt(pageSize),
+        order: [["CreatedAt", "DESC"]],
+      });
+
+      return success(res, result, "Books fetched successfully");
+    } catch (err) {
+      return error(res, err.message);
+    }
+  });
+
+  // 📄 Get All Books with Pagination & Filters
+  bookRouter.get("/book/getbookmaster", authenticate, async (req, res) => {
+    try {
+      const result = await models.Book.findAll({
         order: [["CreatedAt", "DESC"]],
       });
 
@@ -423,6 +449,16 @@ module.exports = (models, router) => {
       });
     }
   });
+
+  const sendNotificationOfBooktoAll = async (title, body, data, type) => {
+    // Fetch all users
+    const users = await models.User.findAll({ where: { isActive: true } });
+
+    // Send notification to each user
+    for (const user of users) {
+      await sendToUser(user.id, { title, body }, data, type);
+    }
+  };
 
   return bookRouter;
 };
