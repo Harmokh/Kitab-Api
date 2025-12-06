@@ -3,31 +3,164 @@ const authenticate = require("../middleware/authorize");
 const { Op } = require("sequelize");
 const Sequelize = require("sequelize");
 const path = require("path");
-const fs = require("fs");
+const fs = require("fs").promises;
+const fsSync = require("fs");
 const { PDFDocument } = require("pdf-lib");
 const { sendToUser } = require("../services/notificationService");
 const rootDir = path.resolve(__dirname, "../../");
-const pdfCache = new Map();
+
+// ============================================================
+// PRODUCTION-GRADE PDF CACHING SYSTEM
+// ============================================================
+class PDFCacheManager {
+  constructor(options = {}) {
+    this.pdfCache = new Map();
+    this.metadataCache = new Map();
+    this.maxPDFSize = options.maxPDFSize || 500 * 1024 * 1024; // 500MB
+    this.maxPDFs = options.maxPDFs || 50;
+    this.pdfTTL = options.pdfTTL || 30 * 60 * 1000; // 30 min
+    this.metadataTTL = options.metadataTTL || 60 * 60 * 1000; // 60 min
+    this.currentSize = 0;
+
+    // Cleanup expired entries every 5 minutes
+    setInterval(() => this.cleanup(), 5 * 60 * 1000);
+  }
+
+  async getPDF(pdfPath) {
+    const cached = this.pdfCache.get(pdfPath);
+    if (cached && Date.now() - cached.timestamp < this.pdfTTL) {
+      cached.hits++;
+      return { pdfDoc: cached.pdfDoc, totalPages: cached.totalPages };
+    }
+
+    // Load and cache
+    const pdfBytes = await fs.readFile(pdfPath);
+    const pdfDoc = await PDFDocument.load(pdfBytes);
+    const totalPages = pdfDoc.getPageCount();
+
+    this.set(pdfPath, { pdfDoc, totalPages, size: pdfBytes.length });
+    return { pdfDoc, totalPages };
+  }
+
+  set(key, value) {
+    // Evict if necessary
+    while (
+      (this.currentSize + value.size > this.maxPDFSize ||
+        this.pdfCache.size >= this.maxPDFs) &&
+      this.pdfCache.size > 0
+    ) {
+      this.evictLRU();
+    }
+
+    this.pdfCache.set(key, {
+      ...value,
+      timestamp: Date.now(),
+      hits: 0,
+    });
+    this.currentSize += value.size;
+  }
+
+  evictLRU() {
+    // Find least recently used with lowest hits
+    let lruKey = null;
+    let lruTime = Infinity;
+    let lruHits = Infinity;
+
+    for (const [key, value] of this.pdfCache.entries()) {
+      if (value.hits < lruHits || (value.hits === lruHits && value.timestamp < lruTime)) {
+        lruKey = key;
+        lruTime = value.timestamp;
+        lruHits = value.hits;
+      }
+    }
+
+    if (lruKey) {
+      const removed = this.pdfCache.get(lruKey);
+      this.currentSize -= removed.size;
+      this.pdfCache.delete(lruKey);
+    }
+  }
+
+  getMetadata(key) {
+    const cached = this.metadataCache.get(key);
+    if (cached && Date.now() - cached.timestamp < this.metadataTTL) {
+      return cached.data;
+    }
+    return null;
+  }
+
+  setMetadata(key, data) {
+    this.metadataCache.set(key, {
+      data,
+      timestamp: Date.now(),
+    });
+  }
+
+  cleanup() {
+    const now = Date.now();
+
+    // Clean PDF cache
+    for (const [key, value] of this.pdfCache.entries()) {
+      if (now - value.timestamp > this.pdfTTL) {
+        this.currentSize -= value.size;
+        this.pdfCache.delete(key);
+      }
+    }
+
+    // Clean metadata cache
+    for (const [key, value] of this.metadataCache.entries()) {
+      if (now - value.timestamp > this.metadataTTL) {
+        this.metadataCache.delete(key);
+      }
+    }
+  }
+
+  clear() {
+    this.pdfCache.clear();
+    this.metadataCache.clear();
+    this.currentSize = 0;
+  }
+
+  getStats() {
+    return {
+      pdfs: this.pdfCache.size,
+      metadata: this.metadataCache.size,
+      sizeBytes: this.currentSize,
+      sizeMB: (this.currentSize / (1024 * 1024)).toFixed(2),
+    };
+  }
+}
+
+// Initialize cache manager
+const cacheManager = new PDFCacheManager({
+  maxPDFSize: 500 * 1024 * 1024,
+  maxPDFs: 50,
+  pdfTTL: 30 * 60 * 1000,
+  metadataTTL: 60 * 60 * 1000,
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => cacheManager.clear());
+process.on('SIGINT', () => cacheManager.clear());
+
 module.exports = (models, router) => {
   const bookRouter = router.Router();
+
   // POST /book/save
   bookRouter.post("/book/save", authenticate, async (req, res) => {
     const {
-      id, // BookId (for update)
+      id,
       title,
       coverImage,
       description,
       author,
-      versions = [], // Array of BookVersion details
+      versions = [],
     } = req.body;
 
     try {
       const savedBook = await models.sequelize.transaction(async (t) => {
         let bookRecord;
 
-        // ======================================================
-        // 🔹 1. UPDATE BOOK OR CREATE NEW
-        // ======================================================
         if (id) {
           bookRecord = await models.Book.findByPk(id, { transaction: t });
           if (bookRecord) {
@@ -45,24 +178,16 @@ module.exports = (models, router) => {
           );
         }
 
-        // ======================================================
-        // 🔹 2. SYNC BOOK VERSIONS (Update / Insert / Delete)
-        // ======================================================
-
-        // 2.a Existing version IDs from DB
         const existingVersionRecords = await models.BookVersion.findAll({
           where: { bookId: bookRecord.id },
           transaction: t,
         });
 
         const existingVersionIds = existingVersionRecords.map((v) => v.id);
-
-        // 2.b Version IDs coming from request (only those having id)
         const incomingVersionIds = versions
           .filter((v) => v.id)
           .map((v) => v.id);
 
-        // 2.c DELETE VERSIONS REMOVED IN UI
         const versionsToDelete = existingVersionIds.filter(
           (oldId) => !incomingVersionIds.includes(oldId)
         );
@@ -74,10 +199,8 @@ module.exports = (models, router) => {
           });
         }
 
-        // 2.d PROCESS EACH VERSION
         for (const v of versions) {
           if (v.id) {
-            // 🔄 UPDATE EXISTING VERSION
             await models.BookVersion.update(
               {
                 versionName: v.versionName,
@@ -92,7 +215,6 @@ module.exports = (models, router) => {
               { where: { id: v.id }, transaction: t }
             );
           } else {
-            // ➕ INSERT NEW VERSION
             await models.BookVersion.create(
               {
                 versionName: v.versionName,
@@ -108,7 +230,6 @@ module.exports = (models, router) => {
               { transaction: t }
             );
 
-            // send notification to all users about new version added
             await sendNotificationOfBooktoAll(
               "New Book Version Added",
               `A new version "${v.versionName}" has been added for the book "${bookRecord.title}".`,
@@ -122,9 +243,6 @@ module.exports = (models, router) => {
           }
         }
 
-        // ======================================================
-        // 🔹 3. RETURN FULL BOOK WITH VERSIONS
-        // ======================================================
         return models.Book.findByPk(bookRecord.id, {
           include: [{ model: models.BookVersion, as: "Versions" }],
           transaction: t,
@@ -145,7 +263,6 @@ module.exports = (models, router) => {
     }
   });
 
-  // 🔍 Get Book by ID
   bookRouter.get("/book/getbyid", authenticate, async (req, res) => {
     try {
       const book = await models.Book.findByPk(req.query.id, {
@@ -159,15 +276,12 @@ module.exports = (models, router) => {
     }
   });
 
-  // 📄 Get All Books with Pagination & Filters
   bookRouter.get("/book/getall", authenticate, async (req, res) => {
     try {
       let { pageSize = 10, currentPage = 1, query } = req.query;
 
-      // Base where clause (always applied)
       const whereClause = {};
 
-      // Apply search only if query is provided
       if (query && query.trim() !== "") {
         whereClause[Op.or] = [
           { title: { [Op.iLike]: `%${query}%` } },
@@ -176,7 +290,6 @@ module.exports = (models, router) => {
         ];
       }
 
-      // Include BookVersion with conditional search
       const includeClause = [
         {
           model: models.BookVersion,
@@ -191,7 +304,7 @@ module.exports = (models, router) => {
                   { description: { [Op.iLike]: `%${query}%` } },
                 ],
               }
-              : undefined, // Don't filter if query is empty
+              : undefined,
         },
       ];
 
@@ -209,7 +322,6 @@ module.exports = (models, router) => {
     }
   });
 
-  // 📄 Get All Books with Pagination & Filters
   bookRouter.get("/book/getbookmaster", authenticate, async (req, res) => {
     try {
       const result = await models.Book.findAll({
@@ -222,7 +334,6 @@ module.exports = (models, router) => {
     }
   });
 
-  // 📄 Get Master List (All Books without pagination)
   bookRouter.get("/book/getmaster", authenticate, async (req, res) => {
     try {
       const books = await models.Book.findAll({
@@ -236,7 +347,6 @@ module.exports = (models, router) => {
     }
   });
 
-  // 🗑️ Soft Delete Book
   bookRouter.delete("/book/delete", authenticate, async (req, res) => {
     try {
       const { id } = req.query;
@@ -249,6 +359,146 @@ module.exports = (models, router) => {
     }
   });
 
+  // ============================================================
+  // OPTIMIZED PDF PAGE EXTRACTION ENDPOINT
+  // ============================================================
+  bookRouter.get("/book/version/newgetpages", async (req, res) => {
+    const startTime = Date.now();
+
+    try {
+      const { versionId, startPage = "1", endPage } = req.query;
+
+      // Input validation
+      if (!versionId) {
+        return res.status(400).json({
+          success: false,
+          message: "versionId is required",
+        });
+      }
+
+      const start = parseInt(startPage, 10);
+      const end = endPage ? parseInt(endPage, 10) : start;
+
+      if (isNaN(start) || isNaN(end)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid page numbers",
+        });
+      }
+
+      // Check ETag for client caching
+      const etag = `"${versionId}-${start}-${end}"`;
+      if (req.headers["if-none-match"] === etag) {
+        return res.status(304).end();
+      }
+
+      // Get version with caching
+      const cacheKey = `version:${versionId}`;
+      let version = cacheManager.getMetadata(cacheKey);
+
+      if (!version) {
+        version = await models.BookVersion.findByPk(versionId, {
+          attributes: ["id", "pdfPath"],
+        });
+
+        if (!version) {
+          return res.status(404).json({
+            success: false,
+            message: "Book version not found",
+          });
+        }
+
+        cacheManager.setMetadata(cacheKey, version);
+      }
+
+      // Build and verify PDF path
+      const pdfPath = path.join(rootDir, "public", version.pdfPath);
+
+      if (!fsSync.existsSync(pdfPath)) {
+        return res.status(404).json({
+          success: false,
+          message: "PDF file not found",
+        });
+      }
+
+      // Load PDF with smart caching
+      const { pdfDoc, totalPages } = await cacheManager.getPDF(pdfPath);
+
+      // Validate page range
+      if (start < 1 || end > totalPages || start > end) {
+        return res.status(400).json({
+          success: false,
+          message: `Page range must be between 1 and ${totalPages}`,
+        });
+      }
+
+      // Optimization: Return original file if requesting all pages
+      if (start === 1 && end === totalPages) {
+        const originalBytes = await fs.readFile(pdfPath);
+        res.setHeader("X-Total-Pages", totalPages);
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Length", originalBytes.length);
+        res.setHeader("Content-Disposition", `inline; filename=pages-${start}-${end}.pdf`);
+        res.setHeader("Cache-Control", "public, max-age=3600");
+        res.setHeader("ETag", etag);
+        return res.send(originalBytes);
+      }
+
+      // Create new PDF with requested pages
+      const newPdfDoc = await PDFDocument.create();
+
+      // Build page indices efficiently
+      const pageIndices = [];
+      for (let i = start - 1; i < end; i++) {
+        pageIndices.push(i);
+      }
+
+      // Copy and add pages
+      const copiedPages = await newPdfDoc.copyPages(pdfDoc, pageIndices);
+      copiedPages.forEach((page) => newPdfDoc.addPage(page));
+
+      // Save with optimization
+      const pdfBytes = await newPdfDoc.save({
+        useObjectStreams: true,
+        addDefaultPage: false,
+      });
+
+      // Set response headers
+      res.setHeader("X-Total-Pages", totalPages);
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Length", pdfBytes.length);
+      res.setHeader("Content-Disposition", `inline; filename=pages-${start}-${end}.pdf`);
+      res.setHeader("Cache-Control", "public, max-age=3600");
+      res.setHeader("ETag", etag);
+
+      // Send response
+      res.send(Buffer.from(pdfBytes));
+
+      // Log performance in development
+      if (process.env.NODE_ENV !== "production") {
+        console.log(
+          `PDF pages ${start}-${end} (v${versionId}) served in ${Date.now() - startTime}ms | Cache: ${JSON.stringify(cacheManager.getStats())}`
+        );
+      }
+    } catch (err) {
+      console.error("PDF extraction error:", {
+        message: err.message,
+        stack: process.env.NODE_ENV !== "production" ? err.stack : undefined,
+        versionId: req.query.versionId,
+        timestamp: new Date().toISOString(),
+      });
+
+      res.status(500).json({
+        success: false,
+        message:
+          process.env.NODE_ENV === "production"
+            ? "Error processing PDF"
+            : err.message,
+      });
+    }
+  });
+
+  // Legacy endpoint (kept for backward compatibility)
   bookRouter.get("/book/version/getpages", async (req, res) => {
     try {
       const { versionId, startPage = 1, endPage } = req.query;
@@ -270,7 +520,6 @@ module.exports = (models, router) => {
 
       const pdfPath = path.join(rootDir, "public", version.pdfPath);
 
-      // ⏩ Check if PDF exists
       try {
         await fs.access(pdfPath);
       } catch {
@@ -280,20 +529,7 @@ module.exports = (models, router) => {
         });
       }
 
-      // ⚡ Load from cache OR read + parse once
-      let pdfDoc;
-      let totalPages;
-
-      if (pdfCache.has(pdfPath)) {
-        ({ pdfDoc, totalPages } = pdfCache.get(pdfPath));
-      } else {
-        const fileBuffer = await fs.readFile(pdfPath); // non-blocking
-        pdfDoc = await PDFDocument.load(fileBuffer);
-        totalPages = pdfDoc.getPageCount();
-
-        // store in cache
-        pdfCache.set(pdfPath, { pdfDoc, totalPages });
-      }
+      const { pdfDoc, totalPages } = await cacheManager.getPDF(pdfPath);
 
       const start = parseInt(startPage, 10);
       const end = endPage ? parseInt(endPage, 10) : start;
@@ -305,7 +541,6 @@ module.exports = (models, router) => {
         });
       }
 
-      // Validate range
       if (start < 1 || end > totalPages || start > end) {
         return res.status(400).json({
           success: false,
@@ -313,7 +548,6 @@ module.exports = (models, router) => {
         });
       }
 
-      // ⚡ Create new PDF with selected pages
       const newPdf = await PDFDocument.create();
       const pageIndices = [];
 
@@ -326,7 +560,6 @@ module.exports = (models, router) => {
 
       const pdfBytes = await newPdf.save();
 
-      // 🔥 Better caching for clients (optional, does not break anything)
       res.setHeader("Cache-Control", "public, max-age=3600");
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader(
@@ -344,7 +577,6 @@ module.exports = (models, router) => {
     }
   });
 
-  // 🔍 Get all versions of a book
   bookRouter.get("/book/versions/getbybook", authenticate, async (req, res) => {
     try {
       const { bookId } = req.query;
@@ -362,7 +594,6 @@ module.exports = (models, router) => {
     }
   });
 
-  // 🔍 SEARCH BOOKS (by title, author, isbn, version name, or keyword)
   bookRouter.get("/book/search", authenticate, async (req, res) => {
     try {
       const { query } = req.query;
@@ -422,71 +653,7 @@ module.exports = (models, router) => {
       return error(res, err.message);
     }
   });
-  bookRouter.get("/book/version/newgetpages", async (req, res) => {
-    try {
-      const { versionId, startPage = 1, endPage } = req.query;
 
-      if (!versionId)
-        return res
-          .status(400)
-          .json({ success: false, message: "versionId is required" });
-
-      const version = await models.BookVersion.findByPk(versionId);
-      if (!version)
-        return res
-          .status(404)
-          .json({ success: false, message: "Book version not found" });
-
-      const pdfPath = path.join(rootDir, "public", version.pdfPath);
-      if (!fs.existsSync(pdfPath))
-        return res
-          .status(404)
-          .json({ success: false, message: "PDF file not found" });
-
-      const pdfDoc = await PDFDocument.load(fs.readFileSync(pdfPath));
-      const totalPages = pdfDoc.getPageCount();
-
-      const start = parseInt(startPage);
-      const end = endPage ? parseInt(endPage) : start;
-
-      if (start < 1 || end > totalPages || start > end)
-        return res.status(400).json({
-          success: false,
-          message: `Page range must be between 1 and ${totalPages}`,
-        });
-
-      const newPdfDoc = await PDFDocument.create();
-      const pagesToCopy = Array.from(
-        { length: end - start + 1 },
-        (_, i) => start - 1 + i
-      );
-
-      const copiedPages = await newPdfDoc.copyPages(pdfDoc, pagesToCopy);
-      copiedPages.forEach((page) => newPdfDoc.addPage(page));
-
-      const pdfBytes = await newPdfDoc.save();
-
-      // ---------- SEND TOTAL PAGES IN HEADER ----------
-      res.setHeader("X-Total-Pages", totalPages);
-      // You can use any custom header (X- prefix recommended)
-
-      // ---------- SEND PDF AS RESPONSE BODY ----------
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader(
-        "Content-Disposition",
-        `inline; filename=pages-${start}-${end}.pdf`
-      );
-
-      res.send(Buffer.from(pdfBytes));
-    } catch (err) {
-      console.error(err);
-      res.status(500).json({
-        success: false,
-        message: err.message || "Error fetching PDF pages",
-      });
-    }
-  });
-  // 5 recently added books
   bookRouter.get("/book/recent", authenticate, async (req, res) => {
     try {
       const books = await models.Book.findAll({
@@ -499,11 +666,18 @@ module.exports = (models, router) => {
     }
   });
 
-  const sendNotificationOfBooktoAll = async (title, body, data, type) => {
-    // Fetch all users
-    const users = await models.User.findAll({ where: { isActive: true } });
+  // Optional: Cache statistics endpoint for monitoring
+  bookRouter.get("/book/cache/stats", authenticate, async (req, res) => {
+    try {
+      const stats = cacheManager.getStats();
+      return success(res, stats, "Cache statistics fetched successfully");
+    } catch (err) {
+      return error(res, err.message);
+    }
+  });
 
-    // Send notification to each user
+  const sendNotificationOfBooktoAll = async (title, body, data, type) => {
+    const users = await models.User.findAll({ where: { isActive: true } });
     for (const user of users) {
       await sendToUser(user.id, { title, body }, data, type);
     }
