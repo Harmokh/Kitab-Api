@@ -63,10 +63,11 @@ module.exports = (models, router) => {
         if (!existingUser.isVerified) {
           const token = generateActivationToken(existingUser.id);
           const activationLink = `${process.env.WEB_URL}/activate/${token}`;
-
+          const logoLink = `${process.env.STATIC_FILE_URL}logo/Logo_Kitab_App.jpg`;
           const html = getActivationEmailTemplate(
             existingUser.name,
-            activationLink
+            activationLink,
+            logoLink
           );
 
           await sendTemplateMail(
@@ -314,7 +315,12 @@ module.exports = (models, router) => {
       const resetLink = `${process.env.WEB_URL}/reset-password/${token}`;
 
       // Prepare email template
-      const html = getForgetPasswordEmailTemplate(user.name, resetLink);
+      const logoLink = `${process.env.STATIC_FILE_URL}logo/Logo_Kitab_App.jpg`;
+      const html = getForgetPasswordEmailTemplate(
+        user.name,
+        resetLink,
+        logoLink
+      );
 
       // Send email
       await sendTemplateMail(

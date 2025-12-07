@@ -1,4 +1,4 @@
-const getActivationEmailTemplate = (name, activationLink) => {
+const getActivationEmailTemplate = (name, activationLink, logolink) => {
   return `
   <div style="font-family: 'Segoe UI', Tahoma, sans-serif; background: #f4f4f4; padding: 0; margin: 0;">
     <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px; margin: 0 auto;">
@@ -6,7 +6,7 @@ const getActivationEmailTemplate = (name, activationLink) => {
       <!-- Header -->
       <tr>
         <td style="background: linear-gradient(135deg, #0a3d2e, #0f5132); padding: 30px; text-align: center; color: #fff;">
-          <img src="https://i.imgur.com/ULbTqKq.png" alt="Faydhaane Yousufi" width="80" style="margin-bottom: 10px;">
+          <img src="${logolink}" alt="Faydhaane Yousufi" width="80" style="margin-bottom: 10px;">
           <h1 style="margin: 0; font-size: 26px; letter-spacing: 1px;">Faydhaane Yousufi</h1>
           <p style="margin: 5px 0 0; font-size: 14px; opacity: 0.9;">Read • Learn • Reflect</p>
         </td>
@@ -75,7 +75,7 @@ const getActivationEmailTemplate = (name, activationLink) => {
   </div>
   `;
 };
-const getForgetPasswordEmailTemplate = (name, resetLink) => {
+const getForgetPasswordEmailTemplate = (name, resetLink, logoLink) => {
   return `
   <div style="font-family: 'Segoe UI', Tahoma, sans-serif; background: #f4f4f4; padding: 0; margin: 0;">
     <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px; margin: 0 auto;">
@@ -83,7 +83,7 @@ const getForgetPasswordEmailTemplate = (name, resetLink) => {
       <!-- Header -->
       <tr>
         <td style="background: linear-gradient(135deg, #0a3d2e, #0f5132); padding: 30px; text-align: center; color: #fff;">
-          <img src="https://i.imgur.com/ULbTqKq.png" alt="Faydhaane Yousufi" width="80" style="margin-bottom: 10px;">
+          <img src="${logoLink}" alt="Faydhaane Yousufi" width="80" style="margin-bottom: 10px;">
           <h1 style="margin: 0; font-size: 26px; letter-spacing: 1px;">Faydhaane Yousufi</h1>
           <p style="margin: 5px 0 0; font-size: 14px; opacity: 0.9;">Read • Learn • Reflect</p>
         </td>
@@ -154,6 +154,5 @@ const getForgetPasswordEmailTemplate = (name, resetLink) => {
   </div>
   `;
 };
-
 
 module.exports = { getActivationEmailTemplate, getForgetPasswordEmailTemplate };
