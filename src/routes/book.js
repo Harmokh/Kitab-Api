@@ -184,8 +184,8 @@ module.exports = (models, router) => {
             `A new book titled "${title}" has been added to the library.`,
             {
               bookId: bookRecord.id,
-              versionName: v.versionName,
-              versionId: v.id,
+              bookName: title,
+              // versionId: v.id,
             },
             "book_update"
           );
