@@ -1,6 +1,7 @@
 const { success, warning, error, MessageType } = require("../utils/response");
 const authenticate = require("../middleware/authorize");
 const { Op } = require("sequelize");
+const { sendToUser } = require("../services/notificationService");
 
 module.exports = (models, router) => {
   const announcementRouter = router.Router();
