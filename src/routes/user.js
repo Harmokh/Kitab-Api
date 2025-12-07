@@ -285,6 +285,14 @@ module.exports = (models, router) => {
         where: { email, isDeleted: false },
       });
 
+      if (!user) {
+        return warning(
+          res,
+          "No account found with this email",
+          MessageType.Warning
+        );
+      }
+
       // 3️⃣ Check user status
       if (!user.isVerified) {
         return warning(
@@ -301,15 +309,7 @@ module.exports = (models, router) => {
           MessageType.Warning
         );
       }
-
-      if (!user) {
-        return warning(
-          res,
-          "No account found with this email",
-          MessageType.Warning
-        );
-      }
-
+      
       // Generate JWT reset token
       const token = generateActivationToken(user.id);
       const resetLink = `${process.env.WEB_URL}/reset-password/${token}`;
