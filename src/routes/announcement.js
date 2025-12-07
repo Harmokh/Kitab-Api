@@ -48,7 +48,7 @@ module.exports = (models, router) => {
             { where: { id } }
           );
 
-          announcement = { id, title, description };    
+          announcement = { id, title, description };
 
           return success(res, null, "Announcement updated successfully");
         }
@@ -66,23 +66,16 @@ module.exports = (models, router) => {
           isDeleted: false,
         });
 
-        announcement = created;
-
-        // 🔔 Send Notification on Create
-        try {
-          await sendNotificationOfAnnouncement(
+        await sendNotificationOfAnnouncement(
+          title,
+          description,
+          {
+            announcementId: created.id,
             title,
             description,
-            {
-              announcementId: created.id,
-              title,
-              description,
-            },
-            "announcement"
-          );
-        } catch (err) {
-          console.error("Notification error (create):", err);
-        }
+          },
+          "announcement"
+        );
 
         return success(res, created, "Announcement created successfully");
       } catch (err) {
