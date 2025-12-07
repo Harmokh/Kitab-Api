@@ -14,14 +14,30 @@ module.exports = (models, router) => {
           req.body;
 
         // 🔸 Validate Title
-        if (!title)
+        if (!title) {
           return warning(res, "Title is required", MessageType.Warning);
+        }
+
+        // 🔸 Validate Description
+        if (!description) {
+          return warning(res, "Description is required", MessageType.Warning);
+        }
+
+        let announcement;
 
         // ==========================================
-        // 🟢 CASE 1: UPDATE (id exists)
+        // 🟢 CASE 1: UPDATE
         // ==========================================
         if (id) {
-          const updated = await models.Announcement.update(
+          const existing = await models.Announcement.findOne({
+            where: { id, isDeleted: false },
+          });
+
+          if (!existing) {
+            return warning(res, "Announcement not found", MessageType.Warning);
+          }
+
+          await models.Announcement.update(
             {
               title,
               description,
@@ -29,17 +45,16 @@ module.exports = (models, router) => {
               startDate,
               endDate,
             },
-            { where: { id, isDeleted: false } }
+            { where: { id } }
           );
 
-          if (!updated[0])
-            return warning(res, "Announcement not found", MessageType.Warning);
+          announcement = { id, title, description };    
 
           return success(res, null, "Announcement updated successfully");
         }
 
         // ==========================================
-        // 🟢 CASE 2: CREATE (no id)
+        // 🟢 CASE 2: CREATE
         // ==========================================
         const created = await models.Announcement.create({
           title,
@@ -51,8 +66,27 @@ module.exports = (models, router) => {
           isDeleted: false,
         });
 
+        announcement = created;
+
+        // 🔔 Send Notification on Create
+        try {
+          await sendNotificationOfAnnouncement(
+            title,
+            description,
+            {
+              announcementId: created.id,
+              title,
+              description,
+            },
+            "announcement"
+          );
+        } catch (err) {
+          console.error("Notification error (create):", err);
+        }
+
         return success(res, created, "Announcement created successfully");
       } catch (err) {
+        console.error("Error in announcement save:", err);
         return error(res, err.message);
       }
     }
@@ -151,6 +185,19 @@ module.exports = (models, router) => {
       }
     }
   );
+
+  const sendNotificationOfAnnouncement = async (title, body, data, type) => {
+    try {
+      const users = await models.User.findAll({
+        where: { isActive: true, isVerified: true, isDeleted: false },
+      });
+      for (const user of users) {
+        await sendToUser(user.id, { title, body }, data, type);
+      }
+    } catch (err) {
+      console.error("Error sending announcement notifications:", err);
+    }
+  };
 
   return announcementRouter;
 };

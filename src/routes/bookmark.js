@@ -1,5 +1,6 @@
 const { success, warning, error, MessageType } = require("../utils/response");
 const authenticate = require("../middleware/authorize");
+const { sendToUser } = require("../services/notificationService");
 
 module.exports = (models, router) => {
   const bookmarkRouter = router.Router();
@@ -8,7 +9,7 @@ module.exports = (models, router) => {
   // POST /bookmark/save
   bookmarkRouter.post("/bookmark/save", authenticate, async (req, res) => {
     try {
-      const { bookVersionId, pageNumber, note } = req.body;
+      const { bookVersionId, pageNumber, note, bookId } = req.body;
       if (!bookVersionId || !pageNumber)
         return warning(
           res,
@@ -37,6 +38,20 @@ module.exports = (models, router) => {
           pageNumber,
           note,
         });
+        await sendToUser(
+          req.user.id,
+          {
+            title: "Bookmark Added",
+            body: `Bookmark added on page ${pageNumber} of your book version.`,
+          },
+          {
+            bookmarkId: bookmark.id,
+            versionId: bookVersionId,
+            pageNumber: pageNumber,
+            bookId: bookId,
+          },
+          "bookmark"
+        );
         return success(res, bookmark, "Bookmark created successfully");
       }
     } catch (err) {
@@ -183,7 +198,7 @@ module.exports = (models, router) => {
                   "description",
                   "CreatedAt",
                 ],
-                required: false
+                required: false,
               },
             ],
           },
@@ -232,7 +247,7 @@ module.exports = (models, router) => {
         const userBookmarks = await models.Bookmark.findAll({
           where: {
             userId: req.user.id,
-            isDeleted: false
+            isDeleted: false,
           },
           include: [
             {
@@ -244,23 +259,34 @@ module.exports = (models, router) => {
                 {
                   model: models.Book,
                   as: "Book",
-                  attributes: ["id", "title", "coverImage", "author", "description"],
-                  required: true
-                }
-              ]
-            }
+                  attributes: [
+                    "id",
+                    "title",
+                    "coverImage",
+                    "author",
+                    "description",
+                  ],
+                  required: true,
+                },
+              ],
+            },
           ],
           order: [
-            [{ model: models.BookVersion, as: "BookVersion" }, { model: models.Book, as: "Book" }, "title", "ASC"],
+            [
+              { model: models.BookVersion, as: "BookVersion" },
+              { model: models.Book, as: "Book" },
+              "title",
+              "ASC",
+            ],
             ["bookVersionId", "ASC"],
-            ["pageNumber", "ASC"]
-          ]
+            ["pageNumber", "ASC"],
+          ],
         });
 
         // Step 2: Group bookmarks by Book → Version → Bookmarks
         const groupedData = {};
 
-        userBookmarks.forEach(bookmark => {
+        userBookmarks.forEach((bookmark) => {
           const book = bookmark.BookVersion.Book;
           const version = bookmark.BookVersion;
 
@@ -272,7 +298,7 @@ module.exports = (models, router) => {
               coverImage: book.coverImage,
               author: book.author,
               description: book.description,
-              versions: {}
+              versions: {},
             };
           }
 
@@ -284,7 +310,7 @@ module.exports = (models, router) => {
               pdfPath: version.pdfPath,
               image: version.image,
               bookId: version.bookId,
-              bookmarks: []
+              bookmarks: [],
             };
           }
 
@@ -294,20 +320,21 @@ module.exports = (models, router) => {
             pageNumber: bookmark.pageNumber,
             note: bookmark.note,
             createdAt: bookmark.CreatedAt,
-            updatedAt: bookmark.UpdatedAt
+            updatedAt: bookmark.UpdatedAt,
           });
         });
 
         // Step 3: Convert to array format
-        const booksArray = Object.values(groupedData).map(book => ({
+        const booksArray = Object.values(groupedData).map((book) => ({
           ...book,
-          versions: Object.values(book.versions).map(version => ({
+          versions: Object.values(book.versions).map((version) => ({
             ...version,
-            bookmarkCount: version.bookmarks.length
+            bookmarkCount: version.bookmarks.length,
           })),
           totalBookmarks: Object.values(book.versions).reduce(
-            (sum, version) => sum + version.bookmarks.length, 0
-          )
+            (sum, version) => sum + version.bookmarks.length,
+            0
+          ),
         }));
 
         // Step 4: Apply pagination

@@ -67,7 +67,10 @@ class PDFCacheManager {
     let lruHits = Infinity;
 
     for (const [key, value] of this.pdfCache.entries()) {
-      if (value.hits < lruHits || (value.hits === lruHits && value.timestamp < lruTime)) {
+      if (
+        value.hits < lruHits ||
+        (value.hits === lruHits && value.timestamp < lruTime)
+      ) {
         lruKey = key;
         lruTime = value.timestamp;
         lruHits = value.hits;
@@ -140,8 +143,8 @@ const cacheManager = new PDFCacheManager({
 });
 
 // Graceful shutdown
-process.on('SIGTERM', () => cacheManager.clear());
-process.on('SIGINT', () => cacheManager.clear());
+process.on("SIGTERM", () => cacheManager.clear());
+process.on("SIGINT", () => cacheManager.clear());
 
 module.exports = (models, router) => {
   const bookRouter = router.Router();
@@ -175,6 +178,16 @@ module.exports = (models, router) => {
           bookRecord = await models.Book.create(
             { title, coverImage, description, author },
             { transaction: t }
+          );
+          await sendNotificationOfBooktoAll(
+            "New Book Added",
+            `A new book titled "${title}" has been added to the library.`,
+            {
+              bookId: bookRecord.id,
+              versionName: v.versionName,
+              versionId: v.id,
+            },
+            "book_update"
           );
         }
 
@@ -238,7 +251,7 @@ module.exports = (models, router) => {
                 versionName: v.versionName,
                 versionId: v.id,
               },
-              "book_version_added"
+              "new_version"
             );
           }
         }
@@ -298,12 +311,12 @@ module.exports = (models, router) => {
           where:
             query && query.trim() !== ""
               ? {
-                [Op.or]: [
-                  { versionName: { [Op.iLike]: `%${query}%` } },
-                  { isbn: { [Op.iLike]: `%${query}%` } },
-                  { description: { [Op.iLike]: `%${query}%` } },
-                ],
-              }
+                  [Op.or]: [
+                    { versionName: { [Op.iLike]: `%${query}%` } },
+                    { isbn: { [Op.iLike]: `%${query}%` } },
+                    { description: { [Op.iLike]: `%${query}%` } },
+                  ],
+                }
               : undefined,
         },
       ];
@@ -438,7 +451,10 @@ module.exports = (models, router) => {
         res.setHeader("X-Total-Pages", totalPages);
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader("Content-Length", originalBytes.length);
-        res.setHeader("Content-Disposition", `inline; filename=pages-${start}-${end}.pdf`);
+        res.setHeader(
+          "Content-Disposition",
+          `inline; filename=pages-${start}-${end}.pdf`
+        );
         res.setHeader("Cache-Control", "public, max-age=3600");
         res.setHeader("ETag", etag);
         return res.send(originalBytes);
@@ -467,7 +483,10 @@ module.exports = (models, router) => {
       res.setHeader("X-Total-Pages", totalPages);
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Length", pdfBytes.length);
-      res.setHeader("Content-Disposition", `inline; filename=pages-${start}-${end}.pdf`);
+      res.setHeader(
+        "Content-Disposition",
+        `inline; filename=pages-${start}-${end}.pdf`
+      );
       res.setHeader("Cache-Control", "public, max-age=3600");
       res.setHeader("ETag", etag);
 
@@ -477,7 +496,9 @@ module.exports = (models, router) => {
       // Log performance in development
       if (process.env.NODE_ENV !== "production") {
         console.log(
-          `PDF pages ${start}-${end} (v${versionId}) served in ${Date.now() - startTime}ms | Cache: ${JSON.stringify(cacheManager.getStats())}`
+          `PDF pages ${start}-${end} (v${versionId}) served in ${
+            Date.now() - startTime
+          }ms | Cache: ${JSON.stringify(cacheManager.getStats())}`
         );
       }
     } catch (err) {
@@ -677,7 +698,9 @@ module.exports = (models, router) => {
   });
 
   const sendNotificationOfBooktoAll = async (title, body, data, type) => {
-    const users = await models.User.findAll({ where: { isActive: true } });
+    const users = await models.User.findAll({
+      where: { isActive: true, isVerified: true, isDeleted: false },
+    });
     for (const user of users) {
       await sendToUser(user.id, { title, body }, data, type);
     }
