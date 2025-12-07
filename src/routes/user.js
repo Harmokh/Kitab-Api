@@ -262,7 +262,7 @@ module.exports = (models, router) => {
 
       if (!user) return error(res, "Invalid activation link");
 
-      if (user.isActive) return success(res, {}, "Account already activated");
+      if (user.isActive && user.isVerified) return success(res, {}, "Account already activated");
 
       await user.update({ isActive: true, isVerified: true });
 
@@ -309,7 +309,7 @@ module.exports = (models, router) => {
           MessageType.Warning
         );
       }
-      
+
       // Generate JWT reset token
       const token = generateActivationToken(user.id);
       const resetLink = `${process.env.WEB_URL}/reset-password/${token}`;
