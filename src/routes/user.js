@@ -12,6 +12,7 @@ const { sendTemplateMail } = require("../utils/mail");
 const {
   getActivationEmailTemplate,
   getForgetPasswordEmailTemplate,
+  getAccountStatusEmailTemplate,
 } = require("../utils/emailTemplates");
 const client = new OAuth2Client(
   "1061077670326-7ng30cuvgbdbu1c7cbdmqrv4fslp8gpb.apps.googleusercontent.com"
@@ -125,10 +126,11 @@ module.exports = (models, router) => {
         const token = generateActivationToken(userRecord.id);
 
         const activationLink = `${process.env.WEB_URL}/activate/${token}`;
-
+        const logoLink = `${process.env.STATIC_FILE_URL}logo/Logo_Kitab_App.jpg`;
         const html = getActivationEmailTemplate(
           userRecord.name,
-          activationLink
+          activationLink,
+          logoLink
         );
 
         await sendTemplateMail(
@@ -262,7 +264,8 @@ module.exports = (models, router) => {
 
       if (!user) return error(res, "Invalid activation link");
 
-      if (user.isActive && user.isVerified) return success(res, {}, "Account already activated");
+      if (user.isActive && user.isVerified)
+        return success(res, {}, "Account already activated");
 
       await user.update({ isActive: true, isVerified: true });
 
@@ -332,6 +335,52 @@ module.exports = (models, router) => {
       );
 
       return success(res, {}, "Password reset link sent to your email");
+    } catch (err) {
+      return error(res, err.message || "Unable to process request");
+    }
+  });
+
+  // Change Status of user
+  userRouter.post("/user/changestatus", async (req, res) => {
+    try {
+      const { id, newStatus } = req.body;
+
+      if (!id) {
+        return warning(res, "User ID is required", MessageType.Warning);
+      }
+
+      const user = await models.User.findOne({
+        where: { id, isDeleted: false },
+      });
+
+      if (!user) {
+        return warning(
+          res,
+          "No account found with this user ID",
+          MessageType.Warning
+        );
+      }
+
+      await user.update({ isActive: newStatus });
+
+      const statusText = newStatus ? "Activated" : "Deactivated";
+      const logoLink = `${process.env.STATIC_FILE_URL}logo/Logo_Kitab_App.jpg`;
+      const html = getAccountStatusEmailTemplate(
+        user.name,
+        newStatus,
+        logoLink,
+        `${process.env.WEB_URL}/login`
+      );
+
+      await sendTemplateMail(
+        user.email,
+        "Your account has been " + statusText,
+        html,
+        null,
+        null
+      );
+
+      return success(res, {}, "Account status updated successfully");
     } catch (err) {
       return error(res, err.message || "Unable to process request");
     }

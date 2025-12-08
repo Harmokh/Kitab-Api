@@ -75,6 +75,7 @@ const getActivationEmailTemplate = (name, activationLink, logolink) => {
   </div>
   `;
 };
+
 const getForgetPasswordEmailTemplate = (name, resetLink, logoLink) => {
   return `
   <div style="font-family: 'Segoe UI', Tahoma, sans-serif; background: #f4f4f4; padding: 0; margin: 0;">
@@ -155,4 +156,96 @@ const getForgetPasswordEmailTemplate = (name, resetLink, logoLink) => {
   `;
 };
 
-module.exports = { getActivationEmailTemplate, getForgetPasswordEmailTemplate };
+const getAccountStatusEmailTemplate = (name, status, logoLink,loginLink) => {
+  const isActive = status === true;
+
+  const title = isActive ? "Account Activated" : "Account Deactivated";
+  const statusColor = isActive ? "#0f5132" : "#842029";
+  const statusBg = isActive ? "#d1e7dd" : "#f8d7da";
+  const buttonColor = isActive ? "#0f5132" : "#842029";
+  const messageText = isActive
+    ? `Alhamdulillah! Your account has been successfully activated.  
+       You can now log in and continue your journey of reading and learning.`
+    : `Your account has been temporarily deactivated.  
+       If you believe this was a mistake, please contact support immediately.`;
+
+  return `
+  <div style="font-family: 'Segoe UI', Tahoma, sans-serif; background: #f4f4f4; padding: 0; margin: 0;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px; margin: 0 auto;">
+      
+      <!-- Header -->
+      <tr>
+        <td style="background: linear-gradient(135deg, #0a3d2e, #0f5132); padding: 30px; text-align: center; color: #fff;">
+          <img src="${logoLink}" alt="Faydhaane Yousufi" width="80" style="margin-bottom: 10px;">
+          <h1 style="margin: 0; font-size: 26px; letter-spacing: 1px;">Faydhaane Yousufi</h1>
+          <p style="margin: 5px 0 0; font-size: 14px; opacity: 0.9;">Read • Learn • Reflect</p>
+        </td>
+      </tr>
+
+      <!-- Body -->
+      <tr>
+        <td style="background: #fff; padding: 30px;">
+          
+          <!-- Greeting -->
+          <h2 style="color: #0f5132; margin-top: 0;">
+            Assalamu Alaikum ${name},
+          </h2>
+
+          <!-- Status Box -->
+          <div style="background:${statusBg}; padding:15px; border-left:5px solid ${statusColor}; border-radius:6px; margin-bottom:20px;">
+            <h3 style="margin:0; color:${statusColor}; font-size:18px;">${title}</h3>
+            <p style="margin:10px 0 0; color:#333; font-size:14px; line-height:1.6;">
+              ${messageText}
+            </p>
+          </div>
+
+          <!-- Button (only for Active) -->
+          ${
+            isActive
+              ? `
+          <div style="text-align: center; margin: 35px 0;">
+            <a href="${loginLink}"
+              style="
+                background: ${buttonColor};
+                color: #fff;
+                padding: 14px 26px;
+                font-size: 16px;
+                text-decoration: none;
+                border-radius: 6px;
+                font-weight: bold;
+                display: inline-block;
+                letter-spacing: 1px;
+              ">
+              Login to Your Account
+            </a>
+          </div>
+          `
+              : ""
+          }
+
+          <!-- Footer message -->
+          <p style="font-size: 13px; color: #666; margin-top: 30px; line-height: 1.6;">
+            This is an automated notification regarding your account status.<br>
+            If this was not initiated by you, please contact support immediately.
+          </p>
+
+        </td>
+      </tr>
+
+      <!-- Footer -->
+      <tr>
+        <td style="background: #0a3d2e; padding: 15px; text-align: center; color: #fff; font-size: 12px;">
+          © ${new Date().getFullYear()} Faydhaane Yousufi — All Rights Reserved.
+        </td>
+      </tr>
+
+    </table>
+  </div>
+  `;
+};
+
+module.exports = {
+  getActivationEmailTemplate,
+  getForgetPasswordEmailTemplate,
+  getAccountStatusEmailTemplate,
+};
