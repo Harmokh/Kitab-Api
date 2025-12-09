@@ -175,5 +175,16 @@ module.exports = (models, router) => {
         }
     });
 
+    // test server notification for a user 
+    notificationRouter.post("/notifications/test", authenticate, async (req, res) => {
+        try {
+            const { userId } = req.body;
+            const result = await notificationService.sendToUser(userId, { title: "Test Notification", body: "This is a test notification" });
+            return success(res, result, "Notification processed successfully");
+        } catch (err) {
+            return error(res, err.message);
+        }
+    });
+
     return notificationRouter;
 };
