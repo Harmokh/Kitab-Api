@@ -311,12 +311,12 @@ module.exports = (models, router) => {
           where:
             query && query.trim() !== ""
               ? {
-                  [Op.or]: [
-                    { versionName: { [Op.iLike]: `%${query}%` } },
-                    { isbn: { [Op.iLike]: `%${query}%` } },
-                    { description: { [Op.iLike]: `%${query}%` } },
-                  ],
-                }
+                [Op.or]: [
+                  { versionName: { [Op.iLike]: `%${query}%` } },
+                  { isbn: { [Op.iLike]: `%${query}%` } },
+                  { description: { [Op.iLike]: `%${query}%` } },
+                ],
+              }
               : undefined,
         },
       ];
@@ -496,8 +496,7 @@ module.exports = (models, router) => {
       // Log performance in development
       if (process.env.NODE_ENV !== "production") {
         console.log(
-          `PDF pages ${start}-${end} (v${versionId}) served in ${
-            Date.now() - startTime
+          `PDF pages ${start}-${end} (v${versionId}) served in ${Date.now() - startTime
           }ms | Cache: ${JSON.stringify(cacheManager.getStats())}`
         );
       }
@@ -688,7 +687,7 @@ module.exports = (models, router) => {
   });
 
   // Optional: Cache statistics endpoint for monitoring
-  bookRouter.get("/book/cache/stats", authenticate, async (req, res) => {
+  bookRouter.get("/book/cache/stats", async (req, res) => {
     try {
       const stats = cacheManager.getStats();
       return success(res, stats, "Cache statistics fetched successfully");
