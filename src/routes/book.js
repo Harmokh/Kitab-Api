@@ -149,7 +149,84 @@ process.on("SIGINT", () => cacheManager.clear());
 module.exports = (models, router) => {
   const bookRouter = router.Router();
 
+  /**
+   * @swagger
+   * components:
+   *   schemas:
+   *     Book:
+   *       type: object
+   *       properties:
+   *         id:
+   *           type: integer
+   *           description: The auto-generated id of the book
+   *         title:
+   *           type: string
+   *           description: The title of the book
+   *         coverImage:
+   *           type: string
+   *           description: The URL of the cover image
+   *         description:
+   *           type: string
+   *           description: The description of the book
+   *         author:
+   *           type: string
+   *           description: The author of the book
+   *         versions:
+   *           type: array
+   *           items:
+   *             $ref: '#/components/schemas/BookVersion'
+   *     BookVersion:
+   *       type: object
+   *       properties:
+   *         id:
+   *           type: integer
+   *           description: The auto-generated id of the version
+   *         versionName:
+   *           type: string
+   *           description: The name of the version
+   *         pdfPath:
+   *           type: string
+   *           description: The path to the PDF file
+   *         bookId:
+   *           type: integer
+   *           description: The id of the book this version belongs to
+   *         author:
+   *           type: string
+   *         description:
+   *           type: string
+   *         publishedYear:
+   *           type: string
+   *         isbn:
+   *           type: string
+   *         image:
+   *           type: string
+   *         uploadedBy:
+   *           type: integer
+   */
+
   // POST /book/save
+  /**
+   * @swagger
+   * /book/save:
+   *   post:
+   *     summary: Create or update a book
+   *     tags: [Books]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             $ref: '#/components/schemas/Book'
+   *     responses:
+   *       200:
+   *         description: The book was successfully saved
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Book'
+   *       500:
+   *         description: Some server error
+   */
   bookRouter.post("/book/save", authenticate, async (req, res) => {
     const {
       id,
@@ -276,6 +353,29 @@ module.exports = (models, router) => {
     }
   });
 
+  /**
+   * @swagger
+   * /book/getbyid:
+   *   get:
+   *     summary: Get a book by ID
+   *     tags: [Books]
+   *     parameters:
+   *       - in: query
+   *         name: id
+   *         schema:
+   *           type: integer
+   *         required: true
+   *         description: The book ID
+   *     responses:
+   *       200:
+   *         description: The book description by id
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Book'
+   *       404:
+   *         description: The book was not found
+   */
   bookRouter.get("/book/getbyid", authenticate, async (req, res) => {
     try {
       const book = await models.Book.findByPk(req.query.id, {
@@ -289,6 +389,43 @@ module.exports = (models, router) => {
     }
   });
 
+  /**
+   * @swagger
+   * /book/getall:
+   *   get:
+   *     summary: Get all books
+   *     tags: [Books]
+   *     parameters:
+   *       - in: query
+   *         name: pageSize
+   *         schema:
+   *           type: integer
+   *         description: Number of books per page
+   *       - in: query
+   *         name: currentPage
+   *         schema:
+   *           type: integer
+   *         description: Current page number
+   *       - in: query
+   *         name: query
+   *         schema:
+   *           type: string
+   *         description: Search query
+   *     responses:
+   *       200:
+   *         description: List of books
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 count:
+   *                   type: integer
+   *                 rows:
+   *                   type: array
+   *                   items:
+   *                     $ref: '#/components/schemas/Book'
+   */
   bookRouter.get("/book/getall", authenticate, async (req, res) => {
     try {
       let { pageSize = 10, currentPage = 1, query } = req.query;
@@ -360,6 +497,25 @@ module.exports = (models, router) => {
     }
   });
 
+  /**
+   * @swagger
+   * /book/delete:
+   *   delete:
+   *     summary: Delete a book
+   *     tags: [Books]
+   *     parameters:
+   *       - in: query
+   *         name: id
+   *         schema:
+   *           type: integer
+   *         required: true
+   *         description: The book ID
+   *     responses:
+   *       200:
+   *         description: The book was deleted
+   *       404:
+   *         description: The book was not found
+   */
   bookRouter.delete("/book/delete", authenticate, async (req, res) => {
     try {
       const { id } = req.query;
@@ -597,6 +753,29 @@ module.exports = (models, router) => {
     }
   });
 
+  /**
+   * @swagger
+   * /book/versions/getbybook:
+   *   get:
+   *     summary: Get all versions of a book
+   *     tags: [Books]
+   *     parameters:
+   *       - in: query
+   *         name: bookId
+   *         schema:
+   *           type: integer
+   *         required: true
+   *         description: The book ID
+   *     responses:
+   *       200:
+   *         description: List of book versions
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: array
+   *               items:
+   *                 $ref: '#/components/schemas/BookVersion'
+   */
   bookRouter.get("/book/versions/getbybook", authenticate, async (req, res) => {
     try {
       const { bookId } = req.query;
@@ -614,6 +793,29 @@ module.exports = (models, router) => {
     }
   });
 
+  /**
+   * @swagger
+   * /book/search:
+   *   get:
+   *     summary: Search for books
+   *     tags: [Books]
+   *     parameters:
+   *       - in: query
+   *         name: query
+   *         schema:
+   *           type: string
+   *         required: true
+   *         description: Search term
+   *     responses:
+   *       200:
+   *         description: List of matching books
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: array
+   *               items:
+   *                 $ref: '#/components/schemas/Book'
+   */
   bookRouter.get("/book/search", authenticate, async (req, res) => {
     try {
       const { query } = req.query;
@@ -674,6 +876,22 @@ module.exports = (models, router) => {
     }
   });
 
+  /**
+   * @swagger
+   * /book/recent:
+   *   get:
+   *     summary: Get recent books
+   *     tags: [Books]
+   *     responses:
+   *       200:
+   *         description: List of recent books
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: array
+   *               items:
+   *                 $ref: '#/components/schemas/Book'
+   */
   bookRouter.get("/book/recent", authenticate, async (req, res) => {
     try {
       const books = await models.Book.findAll({

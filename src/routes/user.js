@@ -38,11 +38,63 @@ module.exports = (models, router) => {
   const userRouter = router.Router();
   const SALT_ROUNDS = 10;
 
+  /**
+   * @swagger
+   * components:
+   *   schemas:
+   *     User:
+   *       type: object
+   *       properties:
+   *         id:
+   *           type: integer
+   *           description: The auto-generated id of the user
+   *         name:
+   *           type: string
+   *           description: The name of the user
+   *         email:
+   *           type: string
+   *           description: The email of the user
+   *         roleId:
+   *           type: integer
+   *           description: The role id of the user
+   *         isActive:
+   *           type: boolean
+   *           description: Whether the user is active
+   *         isVerified:
+   *           type: boolean
+   *           description: Whether the user is verified
+   *         image:
+   *           type: string
+   *           description: Profile image path
+   */
+
   // 🔑 Hash Password
   const hashPassword = async (password) => {
     return await bcrypt.hash(password, SALT_ROUNDS);
   };
 
+  /**
+   * @swagger
+   * /user/save:
+   *   post:
+   *     summary: Create or update a user
+   *     tags: [Users]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             $ref: '#/components/schemas/User'
+   *     responses:
+   *       200:
+   *         description: The user was successfully saved
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/User'
+   *       500:
+   *         description: Some server error
+   */
   userRouter.post("/user/save", async (req, res) => {
     const { id, password, ...userData } = req.body;
 
@@ -163,6 +215,38 @@ module.exports = (models, router) => {
   });
 
   // 🔐 USER LOGIN
+  /**
+   * @swagger
+   * /user/login:
+   *   post:
+   *     summary: Login a user
+   *     tags: [Users]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               email:
+   *                 type: string
+   *               password:
+   *                 type: string
+   *     responses:
+   *       200:
+   *         description: Login successful
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 token:
+   *                   type: string
+   *                 user:
+   *                   $ref: '#/components/schemas/User'
+   *       401:
+   *         description: Unauthorized
+   */
   userRouter.post("/user/login", async (req, res) => {
     const transaction = await sequelize.transaction();
 
@@ -251,7 +335,7 @@ module.exports = (models, router) => {
       return error(
         res,
         err.message ||
-          "An unexpected error occurred during login. Please try again."
+        "An unexpected error occurred during login. Please try again."
       );
     }
   });
@@ -544,6 +628,29 @@ module.exports = (models, router) => {
   });
 
   // 🔍 Get User by ID
+  /**
+   * @swagger
+   * /user/getbyid:
+   *   get:
+   *     summary: Get a user by ID
+   *     tags: [Users]
+   *     parameters:
+   *       - in: query
+   *         name: id
+   *         schema:
+   *           type: integer
+   *         required: true
+   *         description: The user ID
+   *     responses:
+   *       200:
+   *         description: The user description by id
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/User'
+   *       404:
+   *         description: The user was not found
+   */
   userRouter.get("/user/getbyid", authenticate, async (req, res) => {
     try {
       const userRecord = await models.User.findOne({
@@ -562,6 +669,38 @@ module.exports = (models, router) => {
   });
 
   // 📄 Get All Users with Pagination & Filters
+  /**
+   * @swagger
+   * /user/getall:
+   *   get:
+   *     summary: Get all users
+   *     tags: [Users]
+   *     parameters:
+   *       - in: query
+   *         name: pageSize
+   *         schema:
+   *           type: integer
+   *         description: Number of users per page
+   *       - in: query
+   *         name: currentPage
+   *         schema:
+   *           type: integer
+   *         description: Current page number
+   *     responses:
+   *       200:
+   *         description: List of users
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 count:
+   *                   type: integer
+   *                 rows:
+   *                   type: array
+   *                   items:
+   *                     $ref: '#/components/schemas/User'
+   */
   userRouter.get("/user/getall", authenticate, async (req, res) => {
     try {
       const { pageSize = 10, currentPage = 1, ...filters } = req.query;

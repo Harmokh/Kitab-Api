@@ -20,6 +20,9 @@ app.use(
   })
 );
 
+const swaggerUi = require("swagger-ui-express");
+const swaggerSpec = require("./src/config/swagger.js");
+
 app.use(function (req, res, next) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader(
@@ -35,6 +38,9 @@ app.use(function (req, res, next) {
 
   next();
 });
+
+// Swagger UI Route
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 routes(app, express, "/api");
 if (app.get("env") === "development") {
