@@ -184,7 +184,22 @@ module.exports = (models, router) => {
         } catch (err) {
             return error(res, err.message);
         }
-    });
+    })
+    notificationRouter.get("/notifications/getdevicetoken/:userId", async (req, res) => {
+        try {
+            const { userId } = req.params;
+            // get the device token of the user bu id 
+            const device = await models.UserDevice.findOne({ where: { userId } });
+            if (!device) {
+                return warning(res, "Device not found", MessageType.Warning);
+            }
+            const token = device.token;
+            return success(res, token, "Device token fetched successfully");
+
+        } catch (err) {
+            return error(res, err.message);
+        }
+    })
 
     return notificationRouter;
 };
