@@ -8,7 +8,7 @@ const fsSync = require("fs");
 const { PDFDocument } = require("pdf-lib");
 const { sendToUser } = require("../services/notificationService");
 const rootDir = path.resolve(__dirname, "../../");
-
+const wasmPool = require("../utils/pool");
 // ============================================================
 // PRODUCTION-GRADE PDF CACHING SYSTEM
 // ============================================================
@@ -148,7 +148,268 @@ process.on("SIGINT", () => cacheManager.clear());
 
 module.exports = (models, router) => {
   const bookRouter = router.Router();
+  bookRouter.get("/book/version/newgetpages", async (req, res) => {
+    const startTime = Date.now();
 
+    try {
+      const { versionId, startPage = "1", endPage } = req.query;
+
+      // Input validation
+      if (!versionId) {
+        return res.status(400).json({
+          success: false,
+          message: "versionId is required",
+        });
+      }
+
+      const start = parseInt(startPage, 10);
+      const end = endPage ? parseInt(endPage, 10) : start;
+
+      if (isNaN(start) || isNaN(end)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid page numbers",
+        });
+      }
+
+      // Check ETag for client caching
+      const etag = `"${versionId}-${start}-${end}"`;
+      if (req.headers["if-none-match"] === etag) {
+        return res.status(304).end();
+      }
+
+      // Get version with caching
+      const cacheKey = `version:${versionId}`;
+      let version = cacheManager.getMetadata(cacheKey);
+
+      if (!version) {
+        version = await models.BookVersion.findByPk(versionId, {
+          attributes: ["id", "pdfPath"],
+        });
+
+        if (!version) {
+          return res.status(404).json({
+            success: false,
+            message: "Book version not found",
+          });
+        }
+
+        cacheManager.setMetadata(cacheKey, version);
+      }
+
+      // Build and verify PDF path
+      const pdfPath = path.join(rootDir, "public", version.pdfPath);
+
+      if (!fsSync.existsSync(pdfPath)) {
+        return res.status(404).json({
+          success: false,
+          message: "PDF file not found",
+        });
+      }
+
+      // Load PDF with smart caching
+      const { pdfDoc, totalPages } = await cacheManager.getPDF(pdfPath);
+
+      // Validate page range
+      if (start < 1 || end > totalPages || start > end) {
+        return res.status(400).json({
+          success: false,
+          message: `Page range must be between 1 and ${totalPages}`,
+        });
+      }
+
+      // Optimization: Return original file if requesting all pages
+      if (start === 1 && end === totalPages) {
+        const originalBytes = await fs.readFile(pdfPath);
+        res.setHeader("X-Total-Pages", totalPages);
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Length", originalBytes.length);
+        res.setHeader(
+          "Content-Disposition",
+          `inline; filename=pages-${start}-${end}.pdf`
+        );
+        res.setHeader("Cache-Control", "public, max-age=3600");
+        res.setHeader("ETag", etag);
+        return res.send(originalBytes);
+      }
+
+      // Create new PDF with requested pages
+      const newPdfDoc = await PDFDocument.create();
+
+      // Build page indices efficiently
+      const pageIndices = [];
+      for (let i = start - 1; i < end; i++) {
+        pageIndices.push(i);
+      }
+
+      // Copy and add pages
+      const copiedPages = await newPdfDoc.copyPages(pdfDoc, pageIndices);
+      copiedPages.forEach((page) => newPdfDoc.addPage(page));
+
+      // Save with optimization
+      const pdfBytes = await newPdfDoc.save({
+        useObjectStreams: true,
+        addDefaultPage: false,
+      });
+
+      // Set response headers
+      res.setHeader("X-Total-Pages", totalPages);
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Length", pdfBytes.length);
+      res.setHeader(
+        "Content-Disposition",
+        `inline; filename=pages-${start}-${end}.pdf`
+      );
+      res.setHeader("Cache-Control", "public, max-age=3600");
+      res.setHeader("ETag", etag);
+
+      // Send response
+      res.send(Buffer.from(pdfBytes));
+
+      // Log performance in development
+      if (process.env.NODE_ENV !== "production") {
+        console.log(
+          `PDF pages ${start}-${end} (v${versionId}) served in ${Date.now() - startTime
+          }ms | Cache: ${JSON.stringify(cacheManager.getStats())}`
+        );
+      }
+    } catch (err) {
+      console.error("PDF extraction error:", {
+        message: err.message,
+        stack: process.env.NODE_ENV !== "production" ? err.stack : undefined,
+        versionId: req.query.versionId,
+        timestamp: new Date().toISOString(),
+      });
+
+      res.status(500).json({
+        success: false,
+        message:
+          process.env.NODE_ENV === "production"
+            ? "Error processing PDF"
+            : err.message,
+      });
+    }
+  });
+  bookRouter.get("/book/version/newgetpages-wasm", async (req, res) => {
+    const startTime = Date.now();
+
+    try {
+      const { versionId, startPage = "1", endPage } = req.query;
+
+      if (!versionId) {
+        return res.status(400).json({
+          success: false,
+          message: "versionId is required",
+        });
+      }
+
+      const start = parseInt(startPage, 10);
+      const end = endPage ? parseInt(endPage, 10) : start;
+
+      if (isNaN(start) || isNaN(end)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid page numbers",
+        });
+      }
+
+      const etag = `"${versionId}-${start}-${end}"`;
+      if (req.headers["if-none-match"] === etag) {
+        return res.status(304).end();
+      }
+
+      // Metadata cache (reuse existing)
+      const cacheKey = `version:${versionId}`;
+      let version = cacheManager.getMetadata(cacheKey);
+
+      if (!version) {
+        version = await models.BookVersion.findByPk(versionId, {
+          attributes: ["id", "pdfPath"],
+        });
+
+        if (!version) {
+          return res.status(404).json({
+            success: false,
+            message: "Book version not found",
+          });
+        }
+
+        cacheManager.setMetadata(cacheKey, version);
+      }
+
+      const pdfPath = path.join(rootDir, "public", version.pdfPath);
+
+      if (!fsSync.existsSync(pdfPath)) {
+        return res.status(404).json({
+          success: false,
+          message: "PDF file not found",
+        });
+      }
+
+      // Get total pages ONCE (cheap)
+      const pdfBytes = await fs.readFile(pdfPath);
+      const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+      const totalPages = pdfDoc.getPageCount();
+
+      if (start < 1 || end > totalPages || start > end) {
+        return res.status(400).json({
+          success: false,
+          message: `Page range must be between 1 and ${totalPages}`,
+        });
+      }
+
+      // If full PDF requested → send original
+      if (start === 1 && end === totalPages) {
+        res.setHeader("X-Total-Pages", totalPages);
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Length", pdfBytes.length);
+        res.setHeader(
+          "Content-Disposition",
+          `inline; filename=pages-${start}-${end}.pdf`
+        );
+        res.setHeader("Cache-Control", "public, max-age=3600");
+        res.setHeader("ETag", etag);
+        return res.send(pdfBytes);
+      }
+
+      // 🚀 WASM EXECUTION
+      const resultBuffer = await wasmPool.run({
+        pdfPath,
+        start,
+        end,
+      });
+
+      // SAME RESPONSE FORMAT
+      res.setHeader("X-Total-Pages", totalPages);
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Length", resultBuffer.length);
+      res.setHeader(
+        "Content-Disposition",
+        `inline; filename=pages-${start}-${end}.pdf`
+      );
+      res.setHeader("Cache-Control", "public, max-age=3600");
+      res.setHeader("ETag", etag);
+
+      res.send(resultBuffer);
+
+      if (process.env.NODE_ENV !== "production") {
+        console.log(
+          `WASM PDF pages ${start}-${end} served in ${Date.now() - startTime
+          }ms`
+        );
+      }
+    } catch (err) {
+      console.error("WASM PDF error:", err);
+
+      res.status(500).json({
+        success: false,
+        message:
+          process.env.NODE_ENV === "production"
+            ? "Error processing PDF"
+            : err.message,
+      });
+    }
+  });
   /**
    * @swagger
    * components:
