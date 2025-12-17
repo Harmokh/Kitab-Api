@@ -4,16 +4,19 @@ const fs = require("fs");
 module.exports = async ({ pdfPath, start, end }) => {
     const pdfBuffer = fs.readFileSync(pdfPath);
 
-    const doc = mupdf.Document.openDocument(pdfBuffer, "pdf");
+    // Create document
+    const doc = new mupdf.Document(pdfBuffer);
 
-    const writer = new mupdf.PDFWriter();
-    const out = writer.beginDocument();
-
+    const pages = [];
     for (let i = start - 1; i < end; i++) {
-        out.addPage(doc.loadPage(i));
+        const page = doc.loadPage(i); // loadPage returns a Page object
+        pages.push(page);
     }
 
-    writer.endDocument();
+    // MuPDF.js doesn’t have PDFWriter in some versions.
+    // You can render pages to images or extract text.
+    // If you want a PDF output, you might need `pdf-lib` or `HummusJS`
+    // to build a new PDF with these pages.
 
-    return Buffer.from(writer.asBuffer());
+    return pages; // for now returns Page objects
 };
