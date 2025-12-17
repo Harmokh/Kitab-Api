@@ -8,7 +8,6 @@ const fsSync = require("fs");
 const { PDFDocument } = require("pdf-lib");
 const { sendToUser } = require("../services/notificationService");
 const rootDir = path.resolve(__dirname, "../../");
-const wasmPool = require("../utils/pool");
 // ============================================================
 // PRODUCTION-GRADE PDF CACHING SYSTEM
 // ============================================================
