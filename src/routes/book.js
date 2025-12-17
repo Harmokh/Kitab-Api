@@ -8,6 +8,7 @@ const fsSync = require("fs");
 const { PDFDocument } = require("pdf-lib");
 const { sendToUser } = require("../services/notificationService");
 const rootDir = path.resolve(__dirname, "../../");
+
 // ============================================================
 // PRODUCTION-GRADE PDF CACHING SYSTEM
 // ============================================================
@@ -147,148 +148,6 @@ process.on("SIGINT", () => cacheManager.clear());
 
 module.exports = (models, router) => {
   const bookRouter = router.Router();
-  bookRouter.get("/book/version/newgetpages", async (req, res) => {
-    const startTime = Date.now();
-
-    try {
-      const { versionId, startPage = "1", endPage } = req.query;
-
-      // Input validation
-      if (!versionId) {
-        return res.status(400).json({
-          success: false,
-          message: "versionId is required",
-        });
-      }
-
-      const start = parseInt(startPage, 10);
-      const end = endPage ? parseInt(endPage, 10) : start;
-
-      if (isNaN(start) || isNaN(end)) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid page numbers",
-        });
-      }
-
-      // Check ETag for client caching
-      const etag = `"${versionId}-${start}-${end}"`;
-      if (req.headers["if-none-match"] === etag) {
-        return res.status(304).end();
-      }
-
-      // Get version with caching
-      const cacheKey = `version:${versionId}`;
-      let version = cacheManager.getMetadata(cacheKey);
-
-      if (!version) {
-        version = await models.BookVersion.findByPk(versionId, {
-          attributes: ["id", "pdfPath"],
-        });
-
-        if (!version) {
-          return res.status(404).json({
-            success: false,
-            message: "Book version not found",
-          });
-        }
-
-        cacheManager.setMetadata(cacheKey, version);
-      }
-
-      // Build and verify PDF path
-      const pdfPath = path.join(rootDir, "public", version.pdfPath);
-
-      if (!fsSync.existsSync(pdfPath)) {
-        return res.status(404).json({
-          success: false,
-          message: "PDF file not found",
-        });
-      }
-
-      // Load PDF with smart caching
-      const { pdfDoc, totalPages } = await cacheManager.getPDF(pdfPath);
-
-      // Validate page range
-      if (start < 1 || end > totalPages || start > end) {
-        return res.status(400).json({
-          success: false,
-          message: `Page range must be between 1 and ${totalPages}`,
-        });
-      }
-
-      // Optimization: Return original file if requesting all pages
-      if (start === 1 && end === totalPages) {
-        const originalBytes = await fs.readFile(pdfPath);
-        res.setHeader("X-Total-Pages", totalPages);
-        res.setHeader("Content-Type", "application/pdf");
-        res.setHeader("Content-Length", originalBytes.length);
-        res.setHeader(
-          "Content-Disposition",
-          `inline; filename=pages-${start}-${end}.pdf`
-        );
-        res.setHeader("Cache-Control", "public, max-age=3600");
-        res.setHeader("ETag", etag);
-        return res.send(originalBytes);
-      }
-
-      // Create new PDF with requested pages
-      const newPdfDoc = await PDFDocument.create();
-
-      // Build page indices efficiently
-      const pageIndices = [];
-      for (let i = start - 1; i < end; i++) {
-        pageIndices.push(i);
-      }
-
-      // Copy and add pages
-      const copiedPages = await newPdfDoc.copyPages(pdfDoc, pageIndices);
-      copiedPages.forEach((page) => newPdfDoc.addPage(page));
-
-      // Save with optimization
-      const pdfBytes = await newPdfDoc.save({
-        useObjectStreams: true,
-        addDefaultPage: false,
-      });
-
-      // Set response headers
-      res.setHeader("X-Total-Pages", totalPages);
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Length", pdfBytes.length);
-      res.setHeader(
-        "Content-Disposition",
-        `inline; filename=pages-${start}-${end}.pdf`
-      );
-      res.setHeader("Cache-Control", "public, max-age=3600");
-      res.setHeader("ETag", etag);
-
-      // Send response
-      res.send(Buffer.from(pdfBytes));
-
-      // Log performance in development
-      if (process.env.NODE_ENV !== "production") {
-        console.log(
-          `PDF pages ${start}-${end} (v${versionId}) served in ${Date.now() - startTime
-          }ms | Cache: ${JSON.stringify(cacheManager.getStats())}`
-        );
-      }
-    } catch (err) {
-      console.error("PDF extraction error:", {
-        message: err.message,
-        stack: process.env.NODE_ENV !== "production" ? err.stack : undefined,
-        versionId: req.query.versionId,
-        timestamp: new Date().toISOString(),
-      });
-
-      res.status(500).json({
-        success: false,
-        message:
-          process.env.NODE_ENV === "production"
-            ? "Error processing PDF"
-            : err.message,
-      });
-    }
-  });
 
   /**
    * @swagger
@@ -670,168 +529,150 @@ module.exports = (models, router) => {
   });
 
   // ============================================================
-  // MUPDF IMPLEMENTATION (FOR BENCHMARKING)
+  // OPTIMIZED PDF PAGE EXTRACTION ENDPOINT
   // ============================================================
-
-  let mupdfLib;
-  async function getMuPDF() {
-    if (!mupdfLib) {
-      mupdfLib = await import("mupdf");
-    }
-    return mupdfLib;
-  }
-
-  class MuPDFCacheManager {
-    constructor(options = {}) {
-      this.pdfCache = new Map();
-      this.maxPDFSize = options.maxPDFSize || 500 * 1024 * 1024; // 500MB
-      this.maxPDFs = options.maxPDFs || 50;
-      this.pdfTTL = options.pdfTTL || 30 * 60 * 1000;
-      this.currentSize = 0;
-      setInterval(() => this.cleanup(), 5 * 60 * 1000);
-    }
-
-    async getPDF(pdfPath) {
-      const cached = this.pdfCache.get(pdfPath);
-      if (cached && Date.now() - cached.timestamp < this.pdfTTL) {
-        cached.hits++;
-        return { pdfDoc: cached.pdfDoc, totalPages: cached.totalPages };
-      }
-
-      const mupdf = await getMuPDF();
-      const pdfData = await fs.readFile(pdfPath);
-      // Load document using mupdf
-      const pdfDoc = mupdf.PDFDocument.open(pdfData);
-      const totalPages = pdfDoc.countPages();
-
-      this.set(pdfPath, { pdfDoc, totalPages, size: pdfData.length });
-      return { pdfDoc, totalPages };
-    }
-
-    set(key, value) {
-      // Evict if necessary
-      while (
-        (this.currentSize + value.size > this.maxPDFSize ||
-          this.pdfCache.size >= this.maxPDFs) &&
-        this.pdfCache.size > 0
-      ) {
-        this.evictLRU();
-      }
-
-      this.pdfCache.set(key, { ...value, timestamp: Date.now(), hits: 0 });
-      this.currentSize += value.size;
-    }
-
-    evictLRU() {
-      let lruKey = null;
-      let lruTime = Infinity;
-      let lruHits = Infinity;
-
-      for (const [key, value] of this.pdfCache.entries()) {
-        if (value.hits < lruHits || (value.hits === lruHits && value.timestamp < lruTime)) {
-          lruKey = key;
-          lruTime = value.timestamp;
-          lruHits = value.hits;
-        }
-      }
-
-      if (lruKey) {
-        const removed = this.pdfCache.get(lruKey);
-        this.currentSize -= removed.size;
-        // Important: destroy the mupdf document to free WASM memory
-        if (removed.pdfDoc && removed.pdfDoc.destroy) {
-          removed.pdfDoc.destroy();
-        }
-        this.pdfCache.delete(lruKey);
-      }
-    }
-
-    cleanup() {
-      const now = Date.now();
-      for (const [key, value] of this.pdfCache.entries()) {
-        if (now - value.timestamp > this.pdfTTL) {
-          this.currentSize -= value.size;
-          if (value.pdfDoc && value.pdfDoc.destroy) {
-            value.pdfDoc.destroy();
-          }
-          this.pdfCache.delete(key);
-        }
-      }
-    }
-
-    getStats() {
-      return {
-        pdfs: this.pdfCache.size,
-        sizeMB: (this.currentSize / (1024 * 1024)).toFixed(2),
-        impl: 'mupdf'
-      };
-    }
-  }
-
-  const muPdfCache = new MuPDFCacheManager();
-
-  bookRouter.get("/book/version/getpages-mupdf", async (req, res) => {
+  bookRouter.get("/book/version/newgetpages", async (req, res) => {
     const startTime = Date.now();
+
     try {
       const { versionId, startPage = "1", endPage } = req.query;
 
-      if (!versionId) return res.status(400).json({ success: false, message: "versionId required" });
+      // Input validation
+      if (!versionId) {
+        return res.status(400).json({
+          success: false,
+          message: "versionId is required",
+        });
+      }
 
       const start = parseInt(startPage, 10);
       const end = endPage ? parseInt(endPage, 10) : start;
 
-      if (isNaN(start) || isNaN(end)) return res.status(400).json({ success: false, message: "Invalid pages" });
+      if (isNaN(start) || isNaN(end)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid page numbers",
+        });
+      }
 
-      const mupdf = await getMuPDF();
+      // Check ETag for client caching
+      const etag = `"${versionId}-${start}-${end}"`;
+      if (req.headers["if-none-match"] === etag) {
+        return res.status(304).end();
+      }
 
-      // Get version info
-      const version = await models.BookVersion.findByPk(versionId, { attributes: ["pdfPath"] });
-      if (!version) return res.status(404).json({ success: false, message: "Version not found" });
+      // Get version with caching
+      const cacheKey = `version:${versionId}`;
+      let version = cacheManager.getMetadata(cacheKey);
 
+      if (!version) {
+        version = await models.BookVersion.findByPk(versionId, {
+          attributes: ["id", "pdfPath"],
+        });
+
+        if (!version) {
+          return res.status(404).json({
+            success: false,
+            message: "Book version not found",
+          });
+        }
+
+        cacheManager.setMetadata(cacheKey, version);
+      }
+
+      // Build and verify PDF path
       const pdfPath = path.join(rootDir, "public", version.pdfPath);
-      if (!fsSync.existsSync(pdfPath)) return res.status(404).json({ success: false, message: "PDF not found" });
 
-      // Get from cache
-      const { pdfDoc, totalPages } = await muPdfCache.getPDF(pdfPath);
+      if (!fsSync.existsSync(pdfPath)) {
+        return res.status(404).json({
+          success: false,
+          message: "PDF file not found",
+        });
+      }
 
+      // Load PDF with smart caching
+      const { pdfDoc, totalPages } = await cacheManager.getPDF(pdfPath);
+
+      // Validate page range
       if (start < 1 || end > totalPages || start > end) {
-        return res.status(400).json({ success: false, message: `Range 1-${totalPages}` });
+        return res.status(400).json({
+          success: false,
+          message: `Page range must be between 1 and ${totalPages}`,
+        });
       }
 
-      // Create new document
-      const newDoc = new mupdf.PDFDocument();
+      // Optimization: Return original file if requesting all pages
+      if (start === 1 && end === totalPages) {
+        const originalBytes = await fs.readFile(pdfPath);
+        res.setHeader("X-Total-Pages", totalPages);
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Length", originalBytes.length);
+        res.setHeader(
+          "Content-Disposition",
+          `inline; filename=pages-${start}-${end}.pdf`
+        );
+        res.setHeader("Cache-Control", "public, max-age=3600");
+        res.setHeader("ETag", etag);
+        return res.send(originalBytes);
+      }
 
-      // Copy pages (graft)
-      // mupdf pages are 0-indexed for some APIs, but let's check docs.
-      // Usually graftPage takes srcDoc and pageIndex (0-based).
-      // Input start is 1-based.
+      // Create new PDF with requested pages
+      const newPdfDoc = await PDFDocument.create();
+
+      // Build page indices efficiently
+      const pageIndices = [];
       for (let i = start - 1; i < end; i++) {
-        newDoc.graftPage(-1, pdfDoc, i);
+        pageIndices.push(i);
       }
 
-      // Save to buffer
-      // 'incremental' is false (full save), 'pretty' etc.
-      // saveToBuffer returns Uint8Array
-      const pdfBytes = newDoc.saveToBuffer("compress");
+      // Copy and add pages
+      const copiedPages = await newPdfDoc.copyPages(pdfDoc, pageIndices);
+      copiedPages.forEach((page) => newPdfDoc.addPage(page));
 
-      // Important: newDoc is transient, destroy it
-      newDoc.destroy();
+      // Save with optimization
+      const pdfBytes = await newPdfDoc.save({
+        useObjectStreams: true,
+        addDefaultPage: false,
+      });
 
+      // Set response headers
       res.setHeader("X-Total-Pages", totalPages);
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Length", pdfBytes.length);
+      res.setHeader(
+        "Content-Disposition",
+        `inline; filename=pages-${start}-${end}.pdf`
+      );
+      res.setHeader("Cache-Control", "public, max-age=3600");
+      res.setHeader("ETag", etag);
+
+      // Send response
       res.send(Buffer.from(pdfBytes));
 
+      // Log performance in development
       if (process.env.NODE_ENV !== "production") {
-        console.log(`[MuPDF] Pages ${start}-${end} served in ${Date.now() - startTime}ms`);
+        console.log(
+          `PDF pages ${start}-${end} (v${versionId}) served in ${Date.now() - startTime
+          }ms | Cache: ${JSON.stringify(cacheManager.getStats())}`
+        );
       }
-
     } catch (err) {
-      console.error("MuPDF Error:", err);
-      res.status(500).json({ success: false, message: err.message });
+      console.error("PDF extraction error:", {
+        message: err.message,
+        stack: process.env.NODE_ENV !== "production" ? err.stack : undefined,
+        versionId: req.query.versionId,
+        timestamp: new Date().toISOString(),
+      });
+
+      res.status(500).json({
+        success: false,
+        message:
+          process.env.NODE_ENV === "production"
+            ? "Error processing PDF"
+            : err.message,
+      });
     }
   });
-
 
   // Legacy endpoint (kept for backward compatibility)
   bookRouter.get("/book/version/getpages", async (req, res) => {
