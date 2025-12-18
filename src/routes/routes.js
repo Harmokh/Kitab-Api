@@ -11,7 +11,8 @@ module.exports = function (app, express, routeStart) {
   app.use(routeStart, require("./notification.js")(models, express));
   app.use(routeStart, require("./setting.js")(models, express));
   app.use(routeStart, require("./annotation.js")(models, express));
-    app.use(routeStart, require("./announcement.js")(models, express));
+  app.use(routeStart, require("./announcement.js")(models, express));
   app.use(routeStart, require("./spotlight.js")(models, express));
+  app.use(routeStart, require("./bookRoutes.js")(models, express));
 
 };
