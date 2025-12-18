@@ -434,7 +434,7 @@ module.exports = (models, router) => {
     /**
      * Ultra-fast PDF extraction with Worker Threads + QPDF + Disk Cache
      */
-    bookRouter.get("/newbook/version/getpages", async (req, res) => {
+    bookRouter.get("/newbook/version/getpages", authenticate, async (req, res) => {
         const startTime = Date.now();
 
         try {
@@ -608,7 +608,7 @@ module.exports = (models, router) => {
     });
 
     // System stats endpoint
-    bookRouter.get("/newbook/system/stats", authenticate, async (req, res) => {
+    bookRouter.get("/newbook/system/stats", async (req, res) => {
         try {
             const cacheStats = await cacheManager.getStats();
             const workerStats = workerPool ? workerPool.getStats() : null;
@@ -633,7 +633,7 @@ module.exports = (models, router) => {
     });
 
     // Cache statistics
-    bookRouter.get("/newbook/cache/stats", authenticate, async (req, res) => {
+    bookRouter.get("/newbook/cache/stats", async (req, res) => {
         try {
             const stats = await cacheManager.getStats();
             return success(res, stats, "Cache statistics fetched successfully");
