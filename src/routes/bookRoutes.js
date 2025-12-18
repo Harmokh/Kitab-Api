@@ -611,7 +611,8 @@ module.exports = (models, router) => {
     bookRouter.get("/newbook/system/stats", async (req, res) => {
         try {
             const cacheStats = await cacheManager.getStats();
-            const workerStats = workerPool ? workerPool.getStats() : null;
+            const pool = ensureWorkerPool();
+            const workerStats = pool.getStats();
 
             return success(
                 res,
