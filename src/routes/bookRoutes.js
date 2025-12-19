@@ -434,7 +434,7 @@ module.exports = (models, router) => {
     /**
      * Ultra-fast PDF extraction with Worker Threads + QPDF + Disk Cache
      */
-    bookRouter.get("/newbook/version/getpages", authenticate, async (req, res) => {
+    bookRouter.get("/newbook/version/getpages", async (req, res) => {
         const startTime = Date.now();
 
         try {
