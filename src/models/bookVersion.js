@@ -27,6 +27,7 @@ module.exports = (sequelize, Sequelize) => {
       timestamps: true,
       createdAt: "CreatedAt",
       updatedAt: "UpdatedAt",
+      onDelete: "CASCADE",
     }
   );
 
