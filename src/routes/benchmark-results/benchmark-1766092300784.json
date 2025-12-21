@@ -1,0 +1,26 @@
+{
+  "timestamp": "2025-12-18T21:11:06.628Z",
+  "config": {
+    "baseURL": "http://localhost:3000",
+    "token": "YOUR_TOKEN",
+    "versionId": "1",
+    "outputDir": "./benchmark-results"
+  },
+  "tests": {
+    "concurrent": {
+      "successful": 0,
+      "failed": 10,
+      "totalDuration": 17
+    },
+    "load": {
+      "total": 150,
+      "successful": 0,
+      "failed": 150,
+      "durations": {
+        "values": []
+      },
+      "cacheHits": 0,
+      "cacheMisses": 0
+    }
+  }
+}

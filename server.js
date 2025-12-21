@@ -1,4 +1,5 @@
 const express = require("express"),
+  client = require('prom-client'),
   logger = require("morgan"),
   // boom = require("express-boom"),
   cors = require("cors"),
@@ -9,6 +10,15 @@ const express = require("express"),
   }),
   routes = require("./src/routes/routes.js");
 const app = express();
+client.collectDefaultMetrics();
+app.get('/metrics', async (req, res) => {
+  try {
+    res.set('Content-Type', client.register.contentType);
+    res.end(await client.register.metrics());
+  } catch (err) {
+    res.status(500).end(err);
+  }
+})
 app.use("/p", express.static(path.join(__dirname, "/public")));
 app.use(logger("dev"));
 // app.use(boom());
@@ -42,6 +52,7 @@ app.use(function (req, res, next) {
 // Swagger UI Route
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
+
 routes(app, express, "/api");
 if (app.get("env") === "development") {
   app.use(function (err, req, res, next) {
@@ -58,10 +69,9 @@ if (app.get("env") === "development") {
     });
   });
 }
-
-
 app.listen(process.env.API_PORT || 5001, function () {
   console.log("Running on port: " + process.env.API_PORT);
+  console.log("API URL: " + process.env.API_URL);
 });
 
 
