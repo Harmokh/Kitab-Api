@@ -46,11 +46,13 @@ module.exports = (sequelize, Sequelize) => {
       foreignKey: "userId",
       targetKey: "id",
       as: "User",
+      onDelete: "CASCADE",
     });
     Bookmark.belongsTo(models.BookVersion, {
       foreignKey: "bookVersionId",
       targetKey: "id",
       as: "BookVersion",
+      onDelete: "CASCADE",
     });
   };
 

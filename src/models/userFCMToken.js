@@ -41,6 +41,7 @@ module.exports = (sequelize, Sequelize) => {
     UserFcmToken.belongsTo(models.User, {
       foreignKey: "userId",
       as: "User",
+      onDelete: "CASCADE",
     });
   };
 

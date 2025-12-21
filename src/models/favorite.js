@@ -38,7 +38,7 @@ module.exports = (sequelize, Sequelize) => {
     Favorite.belongsTo(models.User, {
       foreignKey: "userId",
       targetKey: "id",
-      as: "User",
+      as: "User"
     });
     Favorite.belongsTo(models.BookVersion, {
       foreignKey: "bookVersionId",

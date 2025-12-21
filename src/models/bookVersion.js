@@ -59,6 +59,11 @@ module.exports = (sequelize, Sequelize) => {
       as: "Favorites",
       onDelete: "CASCADE",
     });
+    BookVersion.hasMany(models.Annotation, {
+      foreignKey: "bookVersionId",
+      as: "Annotations",
+      onDelete: "CASCADE",
+    });
   };
 
   return BookVersion;

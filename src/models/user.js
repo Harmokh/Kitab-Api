@@ -84,17 +84,37 @@ module.exports = (sequelize, Sequelize) => {
       foreignKey: "uploadedBy",
       as: "Uploads",
     });
-    User.hasMany(models.Bookmark, { foreignKey: "userId", as: "Bookmarks" });
-    User.hasMany(models.Favorite, { foreignKey: "userId", as: "Favorites" });
+    User.hasMany(models.Bookmark, {
+      foreignKey: "userId",
+      as: "Bookmarks",
+      onDelete: "CASCADE",
+    });
+    User.hasMany(models.Favorite, {
+      foreignKey: "userId",
+      as: "Favorites",
+      onDelete: "CASCADE",
+    });
     User.hasMany(models.UserEngagement, {
       foreignKey: "userId",
       as: "Engagements",
+      onDelete: "CASCADE",
     });
-    User.hasMany(models.UserSession, { foreignKey: "userId", as: "Sessions" });
-    User.hasMany(models.UserDevice, { foreignKey: "userId", as: "Devices" });
-    User.hasMany(models.Notification, { foreignKey: "userId", as: "Notifications" });
+    User.hasMany(models.UserSession, {
+      foreignKey: "userId",
+      as: "Sessions",
+      onDelete: "CASCADE",
+    });
+    User.hasMany(models.UserDevice, {
+      foreignKey: "userId",
+      as: "Devices",
+      onDelete: "CASCADE",
+    });
+    User.hasMany(models.Notification, {
+      foreignKey: "userId",
+      as: "Notifications",
+      onDelete: "CASCADE",
+    });
   };
-
 
   return User;
 };
