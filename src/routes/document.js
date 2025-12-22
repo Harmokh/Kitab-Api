@@ -1,98 +1,141 @@
-var multer = require("multer");
-var filenamedb;
-var fs = require("fs");
-const { success, error } = require("../utils/response");
-const { Op } = require("sequelize");
-const AttachmentType = require("../utils/attachmentType");
+const multer = require("multer");
+const fs = require("fs");
+const path = require("path");
 const authenticate = require("../middleware/authorize");
-var dir = "";
-var storage = multer.diskStorage({
-  destination: function (req, file, callback) {
-    callback(null, dir);
+
+/* =========================
+   SAFE STORAGE CONFIG
+========================= */
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const destination = path.basename(req.query.destination || "uploads");
+    const uploadDir = path.join(__dirname, "../public", destination);
+
+    fs.mkdir(uploadDir, { recursive: true }, (err) => {
+      cb(err, uploadDir);
+    });
   },
-  filename: function (req, file, callback) {
-    filenamedb =
-      new Date().getDate() +
-      Math.floor(Math.random() * 10000000000000) +
+
+  filename: (req, file, cb) => {
+    const uniqueName =
+      Date.now() +
       "-" +
-      file.originalname;
-    callback(null, filenamedb);
+      Math.round(Math.random() * 1e9) +
+      path.extname(file.originalname);
+
+    cb(null, uniqueName);
   },
 });
 
-var routes = (models, router) => {
-  var documentRouter = router.Router();
+/* =========================
+   FILE VALIDATION
+========================= */
+const fileFilter = (req, file, cb) => {
+  const allowedTypes = [
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "image/jpeg",
+    "image/png",
+    "text/plain",
+  ];
+
+  if (!allowedTypes.includes(file.mimetype)) {
+    return cb(new Error("Invalid file type"), false);
+  }
+
+  cb(null, true);
+};
+
+/* =========================
+   MULTER INSTANCE
+========================= */
+const upload = multer({
+  storage,
+  fileFilter,
+  limits: {
+    fileSize: 1 * 1024 * 1024 * 1024, // 1 GB
+  },
+});
+
+module.exports = (models, router) => {
+  const documentRouter = router.Router();
+
+  /* =========================
+     MULTIPLE FILE UPLOAD
+  ========================= */
   documentRouter
-    .post("/document/uploadmultiple", authenticate, (req, res) => {
-      dir = "";
-      dir = "./public/";
-      dir = dir + req.query.destination;
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir);
-      }
-      var uploadmultiple = multer({ storage: storage }).array("files");
-      uploadmultiple(req, res, function (err) {
-        if (req.fileValidationError) {
-          return res.send(req.fileValidationError);
-        } else if (!req.files) {
-          return res.send("Please select an image to upload");
-        } else if (err instanceof multer.MulterError) {
-          return res.send(err);
-        } else if (err) {
-          return res.send(err);
+    .post(
+      "/document/uploadmultiple",
+      authenticate,
+      upload.array("files", 10),
+      (req, res) => {
+        if (!req.files || req.files.length === 0) {
+          return res.status(400).json({ error: "No files uploaded" });
         }
-        let files = [];
-        for (var i = 0; i < req.files.length; i++) {
-          files.push(req.query.destination + "/" + req.files[i].filename);
-        }
+
+        const destination = req.query.destination || "uploads";
+
+        const files = req.files.map((file) =>
+          path.join(destination, file.filename)
+        );
+
         return res.json(files);
-      });
-    })
-    .post("/document/uploadsingle", authenticate, (req, res) => {
-      dir = "";
-      dir = "./public/";
-      dir = dir + req.query.destination;
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir);
       }
-      var uploadsingle = multer({
-        storage: storage,
-        limits: {
-          fileSize: 1024 * 1024 * 1000, // 5MB limit
-        },
-      }).single("file");
-      uploadsingle(req, res, function (err) {
-        if (req.fileValidationError) {
-          return res.send(req.fileValidationError);
-        } else if (!req.file) {
-          return res.send("Please select an image to upload");
-        } else if (err instanceof multer.MulterError) {
-          return res.send(err);
-        } else if (err) {
-          return res.send(err);
+    )
+
+    /* =========================
+     SINGLE FILE UPLOAD
+  ========================= */
+    .post(
+      "/document/uploadsingle",
+      authenticate,
+      upload.single("file"),
+      (req, res) => {
+        if (!req.file) {
+          return res.status(400).json({ error: "No file uploaded" });
         }
-        const file = req.query.destination + "/" + req.file.filename;
+
+        const destination = req.query.destination || "uploads";
+        const file = destination + "/" + req.file.filename;
         return res.json(file);
-      });
-    })
-    .delete("/document/deletefile", authenticate, async (req, res, next) => {
+      }
+    )
+
+    .delete("/document/deletefile", authenticate, async (req, res) => {
       try {
-        var fs = require("fs");
-        const index = req.query.url.indexOf("sp") + 3;
-        // const filename = req.query.url.substring(index);
-        var dir = "./public/" + req.query.url;
-        fs.unlink(dir, (err) => {
-          if (err) {
-            res.json(err);
-          } else {
-            res.status(200).json("File Deleted");
-          }
+        const fileUrl = req.query.url;
+
+        if (!fileUrl) {
+          return res.status(400).json({ error: "File path is required" });
+        }
+
+        // Prevent directory traversal
+        const safeFilePath = path
+          .normalize(fileUrl)
+          .replace(/^(\.\.(\/|\\|$))+/, "");
+        const fullPath = path.join(__dirname, "../public", safeFilePath);
+
+        // Ensure file exists
+        if (!fs.existsSync(fullPath)) {
+          return res.status(404).json({ error: "File not found" });
+        }
+
+        // Delete file
+        await fs.promises.unlink(fullPath);
+
+        return res.status(200).json({
+          message: "File deleted successfully",
+          file: fileUrl,
         });
       } catch (err) {
-        res.status(500);
-        res.send(err.message);
+        return res.status(500).json({
+          error: "Failed to delete file",
+          details: err.message,
+        });
       }
     })
+
     .post("/document/uploadfile", authenticate, (req, res) => {
       dir = "";
       dir = "./public/";
@@ -157,10 +200,10 @@ var routes = (models, router) => {
             required: !!uploadedBy,
             where: uploadedBy
               ? {
-                fullName: {
-                  [Op.iLike]: `%${uploadedBy}%`,
-                },
-              }
+                  fullName: {
+                    [Op.iLike]: `%${uploadedBy}%`,
+                  },
+                }
               : undefined,
           },
           {
@@ -170,10 +213,10 @@ var routes = (models, router) => {
             required: !!attachmentType,
             where: attachmentType
               ? {
-                name: {
-                  [Op.iLike]: `%${attachmentType}%`,
-                },
-              }
+                  name: {
+                    [Op.iLike]: `%${attachmentType}%`,
+                  },
+                }
               : undefined,
           },
         ];
@@ -213,5 +256,3 @@ var routes = (models, router) => {
     });
   return documentRouter;
 };
-
-module.exports = routes;
