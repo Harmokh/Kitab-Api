@@ -1,5 +1,27 @@
 const { success, warning, error, MessageType } = require("../utils/response");
 const authenticate = require("../middleware/authorize");
+const multer = require("multer");
+const path = require("path");
+const fs = require("fs");
+
+// Configure multer to save files in the public/audio folder
+const audioUploadPath = path.join(__dirname, "../../public/audio");
+
+// Ensure folder exists
+if (!fs.existsSync(audioUploadPath)) {
+    fs.mkdirSync(audioUploadPath, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => cb(null, audioUploadPath),
+    filename: (req, file, cb) => {
+        const ext = path.extname(file.originalname) || ".wav";
+        const filename = `audio_${Date.now()}${ext}`;
+        cb(null, filename);
+    }
+});
+
+const upload = multer({ storage });
 
 module.exports = (models, router) => {
     const annotationRouter = router.Router();
@@ -288,6 +310,27 @@ module.exports = (models, router) => {
             }
         }
     );
+    annotationRouter.post(
+        "/annotation/upload-audio",
+        authenticate,
+        upload.single("audio"),
+        async (req, res) => {
+            try {
+                if (!req.file) {
+                    return warning(res, "No audio file uploaded", MessageType.Warning);
+                }
 
+                // Return the public path
+                const audioPath = `/p/audio/${req.file.filename}`;
+
+                console.log("Audio uploaded successfully:", audioPath);
+
+                return success(res, { audioPath }, "Audio uploaded successfully");
+            } catch (err) {
+                console.error("Error uploading audio:", err);
+                return error(res, err.message || "Error uploading audio");
+            }
+        }
+    );
     return annotationRouter;
 };
