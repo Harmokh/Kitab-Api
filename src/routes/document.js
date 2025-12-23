@@ -2,14 +2,14 @@ const multer = require("multer");
 const fs = require("fs");
 const path = require("path");
 const authenticate = require("../middleware/authorize");
-
+var dir = "";
 /* =========================
    SAFE STORAGE CONFIG
 ========================= */
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const destination = path.basename(req.query.destination || "uploads");
-    const uploadDir = path.join(__dirname, "../public", destination);
+    const uploadDir = path.join(dir, "public", destination);
 
     fs.mkdir(uploadDir, { recursive: true }, (err) => {
       cb(err, uploadDir);
