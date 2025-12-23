@@ -114,7 +114,7 @@ module.exports = (models, router) => {
         const safeFilePath = path
           .normalize(fileUrl)
           .replace(/^(\.\.(\/|\\|$))+/, "");
-        const fullPath = path.join(__dirname, "../public", safeFilePath);
+        const fullPath = path.join(dir, "../public", safeFilePath);
 
         // Ensure file exists
         if (!fs.existsSync(fullPath)) {
