@@ -39,6 +39,7 @@ module.exports = (models, router) => {
                 rect,
                 color,
                 content,
+                audioPath,
             } = req.body;
 
             if (!versionId || !pageNumber || !rect)
@@ -63,7 +64,8 @@ module.exports = (models, router) => {
                     type,
                     rect,
                     color,
-                    content
+                    content,
+                    audioPath,
                 });
                 return success(res, annotation, "Annotation updated successfully");
             } else {
@@ -77,6 +79,7 @@ module.exports = (models, router) => {
                     rect,
                     color,
                     content,
+                    audioPath,
                 });
                 return success(res, annotation, "Annotation created successfully");
             }
