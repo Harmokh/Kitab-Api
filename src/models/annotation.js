@@ -13,6 +13,11 @@ module.exports = (sequelize, Sequelize) => {
         type: Sequelize.UUID,
         allowNull: false,
       },
+      audioPath: {
+        field: "AudioPath",
+        type: Sequelize.STRING,
+        allowNull: true,
+      },
       versionId: {
         field: "VersionId",
         type: Sequelize.UUID,
