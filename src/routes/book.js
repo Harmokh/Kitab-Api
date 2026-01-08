@@ -294,6 +294,7 @@ module.exports = (models, router) => {
             await models.BookVersion.update(
               {
                 versionName: v.versionName,
+                language: v.language,
                 pdfPath: v.pdfPath,
                 author: v.author,
                 description: v.description,
@@ -308,6 +309,7 @@ module.exports = (models, router) => {
             await models.BookVersion.create(
               {
                 versionName: v.versionName,
+                language: v.language,
                 pdfPath: v.pdfPath,
                 bookId: bookRecord.id,
                 author: v.author,
@@ -448,12 +450,13 @@ module.exports = (models, router) => {
           where:
             query && query.trim() !== ""
               ? {
-                [Op.or]: [
-                  { versionName: { [Op.iLike]: `%${query}%` } },
-                  { isbn: { [Op.iLike]: `%${query}%` } },
-                  { description: { [Op.iLike]: `%${query}%` } },
-                ],
-              }
+                  [Op.or]: [
+                    { versionName: { [Op.iLike]: `%${query}%` } },
+                    { language: { [Op.iLike]: `%${query}%` } },
+                    { isbn: { [Op.iLike]: `%${query}%` } },
+                    { description: { [Op.iLike]: `%${query}%` } },
+                  ],
+                }
               : undefined,
         },
       ];
@@ -652,7 +655,8 @@ module.exports = (models, router) => {
       // Log performance in development
       if (process.env.NODE_ENV !== "production") {
         console.log(
-          `PDF pages ${start}-${end} (v${versionId}) served in ${Date.now() - startTime
+          `PDF pages ${start}-${end} (v${versionId}) served in ${
+            Date.now() - startTime
           }ms | Cache: ${JSON.stringify(cacheManager.getStats())}`
         );
       }
@@ -843,6 +847,7 @@ module.exports = (models, router) => {
             where: {
               [Op.or]: [
                 { versionName: { [Op.iLike]: searchTerm } },
+                { language: { [Op.iLike]: searchTerm } },
                 Sequelize.where(
                   Sequelize.cast(Sequelize.col("Versions.isbn"), "TEXT"),
                   { [Op.iLike]: searchTerm }

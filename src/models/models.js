@@ -49,7 +49,7 @@ Object.keys(db).forEach((modelName) => {
 
 // Sync models to DB
 sequelize
-  .sync({ alter: true })
+  .sync({ alter: false })
   .then(() => {
     console.log("All models synced with PostgreSQL database.");
   })

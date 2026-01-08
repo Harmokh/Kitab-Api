@@ -14,6 +14,11 @@ module.exports = (sequelize, Sequelize) => {
         type: Sequelize.STRING,
         allowNull: false,
       },
+      language: {
+        field: "Language",
+        type: Sequelize.STRING,
+        allowNull: true,
+      },
       image: { field: "Image", type: Sequelize.STRING, allowNull: false },
       author: { field: "Author", type: Sequelize.STRING },
       description: { field: "Description", type: Sequelize.TEXT },
