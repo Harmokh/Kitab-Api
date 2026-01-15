@@ -609,24 +609,50 @@ module.exports = (models, router) => {
 
 
     bookRouter.get("/newbook/search-words", async (req, res) => {
+        let pdfPath = null;
 
         try {
             const { versionId, query } = req.query;
+
             if (!versionId || !query) {
                 return error(res, "Missing required parameters");
             }
+
             const version = await models.BookVersion.findByPk(versionId);
             if (!version) {
                 return error(res, "Version not found");
             }
-            const pdfPath = path.join(rootDir, "uploads", version.pdfPath);
-            console.log(pdfPath);
+
+            pdfPath = path.join(rootDir, "uploads", version.pdfPath);
+
+            // Validate PDF existence BEFORE search
+            if (!fsSync.existsSync(pdfPath)) {
+                return error(res, "PDF file not found", {
+                    pdfPath
+                });
+            }
+
             const results = await searchEntirePdf({ pdfPath, query });
-            return success(res, results, MessageType.SUCCESS, "Search results", pdfPath);
+
+            return success(
+                res,
+                results,
+                MessageType.SUCCESS,
+                "Search results",
+                { pdfPath }
+            );
+
         } catch (err) {
-            return error(res, err.message);
+            return error(
+                res,
+                err.message || "PDF search failed",
+                {
+                    pdfPath
+                }
+            );
         }
     });
+
 
     // System stats endpoint
     bookRouter.get("/newbook/system/stats", async (req, res) => {
