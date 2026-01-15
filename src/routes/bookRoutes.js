@@ -639,7 +639,7 @@ module.exports = (models, router) => {
                 results,
                 MessageType.SUCCESS,
                 "Search results",
-                { pdfPath }
+                { pdfPath, version }
             );
 
         } catch (err) {
