@@ -610,6 +610,7 @@ module.exports = (models, router) => {
 
     bookRouter.get("/newbook/search-words", async (req, res) => {
         let pdfPath = null;
+        let version = null;
 
         try {
             const { versionId, query } = req.query;
@@ -618,21 +619,20 @@ module.exports = (models, router) => {
                 return error(res, "Missing required parameters");
             }
 
-            const version = await models.BookVersion.findByPk(versionId, {
+            version = await models.BookVersion.findByPk(versionId, {
                 attributes: ["id", "pdfPath"],
             });
-            if (!version) {
-                return error(res, "Version not found");
+
+            if (!version || !version.pdfPath) {
+                return error(res, "Invalid book version or PDF path");
             }
 
-            pdfPath = path.join("public", version.pdfPath);
+            const rootDir = path.resolve(__dirname, "../../");
 
-            // Validate PDF existence BEFORE search
+            pdfPath = path.resolve(rootDir, "public", version.pdfPath);
+
             if (!fsSync.existsSync(pdfPath)) {
-                return error(res, "PDF file not found", {
-                    pdfPath,
-                    version
-                });
+                return error(res, "PDF file not found", { pdfPath });
             }
 
             const results = await searchEntirePdf({ pdfPath, query });
@@ -642,20 +642,18 @@ module.exports = (models, router) => {
                 results,
                 MessageType.SUCCESS,
                 "Search results",
-                { pdfPath, version }
+                { pdfPath }
             );
 
         } catch (err) {
             return error(
                 res,
                 err.message || "PDF search failed",
-                {
-                    pdfPath,
-                    version
-                }
+                { pdfPath, version }
             );
         }
     });
+
 
 
     // System stats endpoint
