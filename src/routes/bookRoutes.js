@@ -8,9 +8,10 @@ const { execFile } = require("child_process");
 const { promisify } = require("util");
 const { Worker } = require("worker_threads");
 const os = require("os");
-const searchEntirePdf = require("../utils/searchEntirePdf");
+
 const execFileAsync = promisify(execFile);
 const rootDir = path.resolve(__dirname, "../../");
+const searchEntirePdf = require("../utils/searchEntirePdf");
 
 // ============================================================
 // WORKER THREAD POOL FOR PDF PROCESSING
