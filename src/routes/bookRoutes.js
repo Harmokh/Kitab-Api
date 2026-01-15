@@ -623,7 +623,7 @@ module.exports = (models, router) => {
                 return error(res, "Version not found");
             }
 
-            pdfPath = path.join(rootDir, "uploads", version.pdfPath);
+            pdfPath = path.join(rootDir, "uploads", version.PDFPath);
 
             // Validate PDF existence BEFORE search
             if (!fsSync.existsSync(pdfPath)) {
