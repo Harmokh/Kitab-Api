@@ -620,8 +620,9 @@ module.exports = (models, router) => {
                 return error(res, "Version not found");
             }
             const pdfPath = path.join(rootDir, "uploads", version.pdfPath);
+            console.log(pdfPath);
             const results = await searchEntirePdf({ pdfPath, query });
-            return success(res, results, MessageType.SUCCESS, "Search results");
+            return success(res, results, MessageType.SUCCESS, "Search results", pdfPath);
         } catch (err) {
             return error(res, err.message);
         }
