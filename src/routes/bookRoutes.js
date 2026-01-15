@@ -647,7 +647,8 @@ module.exports = (models, router) => {
                 res,
                 err.message || "PDF search failed",
                 {
-                    pdfPath
+                    pdfPath,
+                    version
                 }
             );
         }
