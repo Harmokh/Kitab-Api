@@ -627,7 +627,9 @@ module.exports = (models, router) => {
                 return error(res, "Version not found", 404);
             }
 
-            pdfPath = path.join(
+            // ✅ ABSOLUTE PATH (IMPORTANT)
+            pdfPath = path.resolve(
+                process.cwd(),
                 "public",
                 version.pdfPath
             );
@@ -643,12 +645,13 @@ module.exports = (models, router) => {
 
             const results = await searchEntirePdf({ pdfPath, query });
 
+            // ✅ CORRECT success() CALL
             return success(
                 res,
                 results,
-                MessageType.SUCCESS,
                 "Search results",
-                { pdfPath }
+                MessageType.SUCCESS,
+                200
             );
 
         } catch (err) {
