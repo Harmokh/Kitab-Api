@@ -11,7 +11,7 @@ function extractSnippets(pageText, query, maxSnippets = 3) {
 
     for (let i = 0; i < lines.length && snippets.length < maxSnippets; i++) {
         if (regex.test(lines[i])) {
-            // Add context: previous line, current line, next line
+            // Include context: previous line, current line, next line
             const contextLines = [
                 lines[i - 1]?.trim(),
                 lines[i].trim(),
@@ -30,8 +30,9 @@ function searchEntirePdf({ pdfPath, query }) {
         const safeQuery = escapeRegExp(query);
         const regex = new RegExp(safeQuery, "gi");
 
+        // Spawn pdftotext process
         const child = spawn(
-            process.env.PDFTOTEXT_BIN || "/usr/bin/pdftotext",
+            process.env.PDFTOTEXT_BIN || "pdftotext",
             ["-layout", "-enc", "UTF-8", pdfPath, "-"]
         );
 
@@ -40,10 +41,11 @@ function searchEntirePdf({ pdfPath, query }) {
         let stderr = "";
         const results = [];
 
+        // Handle stdout data (PDF text content)
         child.stdout.on("data", chunk => {
             buffer += chunk.toString("utf8");
 
-            // Split by form feed character (page separator)
+            // Split by form feed character (\f) which separates pages
             const pages = buffer.split("\f");
 
             // Keep the last incomplete page in buffer
@@ -64,13 +66,15 @@ function searchEntirePdf({ pdfPath, query }) {
             }
         });
 
+        // Handle stderr (errors)
         child.stderr.on("data", data => {
             stderr += data.toString();
         });
 
+        // Handle process completion
         child.on("close", code => {
             if (code !== 0) {
-                return reject(new Error(stderr || "pdftotext failed"));
+                return reject(new Error(stderr || `pdftotext exited with code ${code}`));
             }
 
             // Process the final page remaining in buffer
@@ -88,8 +92,9 @@ function searchEntirePdf({ pdfPath, query }) {
             resolve(results);
         });
 
+        // Handle spawn errors
         child.on("error", err => {
-            reject(new Error(`pdftotext error: ${err.message}`));
+            reject(new Error(`Failed to spawn pdftotext: ${err.message}. Make sure poppler-utils is installed.`));
         });
     });
 }

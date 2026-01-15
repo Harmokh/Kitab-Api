@@ -610,9 +610,6 @@ module.exports = (models, router) => {
 
 
     bookRouter.get("/newbook/search-words", async (req, res) => {
-        let pdfPath = null;
-        let version = null;
-
         try {
             const { versionId, query } = req.query;
 
@@ -625,8 +622,8 @@ module.exports = (models, router) => {
                 return error(res, "Query must be at least 2 characters long", 400);
             }
 
-            // Find version
-            version = await models.BookVersion.findByPk(versionId, {
+            // Find version in database
+            const version = await models.BookVersion.findByPk(versionId, {
                 attributes: ["id", "pdfPath"],
             });
 
@@ -634,8 +631,8 @@ module.exports = (models, router) => {
                 return error(res, "Version not found", 404);
             }
 
-            // Build absolute path
-            pdfPath = path.resolve(
+            // Build absolute path to PDF
+            const pdfPath = path.resolve(
                 process.cwd(),
                 "public",
                 version.pdfPath
@@ -643,16 +640,14 @@ module.exports = (models, router) => {
 
             // Verify file exists
             if (!fsSync.existsSync(pdfPath)) {
-                return error(
-                    res,
-                    "PDF file not found on server",
-                    404,
-                    { pdfPath }
-                );
+                return error(res, "PDF file not found on server", 404, { pdfPath });
             }
 
             // Search PDF
-            const results = await searchEntirePdf({ pdfPath, query: query.trim() });
+            const results = await searchEntirePdf({
+                pdfPath,
+                query: query.trim()
+            });
 
             // Return results
             return success(
@@ -675,18 +670,10 @@ module.exports = (models, router) => {
             return error(
                 res,
                 err.message || "PDF search failed",
-                500,
-                {
-                    pdfPath,
-                    versionId: version?.id,
-                    error: err.stack
-                }
+                500
             );
         }
     });
-
-
-
     // System stats endpoint
     bookRouter.get("/newbook/system/stats", async (req, res) => {
         try {
