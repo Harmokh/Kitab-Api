@@ -620,7 +620,7 @@ module.exports = (models, router) => {
 
             const version = await models.BookVersion.findByPk(versionId);
             if (!version) {
-                return error(res, "Version not found");
+                return error(res, "Version not found", version);
             }
 
             pdfPath = path.join("public", version.pdfPath);
