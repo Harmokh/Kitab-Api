@@ -628,7 +628,7 @@ module.exports = (models, router) => {
             }
 
             pdfPath = path.join(
-                "/var/www/kitab/kitab-api/public",
+                "public",
                 version.pdfPath
             );
 
