@@ -618,7 +618,9 @@ module.exports = (models, router) => {
                 return error(res, "Missing required parameters");
             }
 
-            const version = await models.BookVersion.findByPk(versionId);
+            const version = await models.BookVersion.findByPk(versionId, {
+                attributes: ["id", "pdfPath"],
+            });
             if (!version) {
                 return error(res, "Version not found", version);
             }
