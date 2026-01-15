@@ -622,7 +622,7 @@ module.exports = (models, router) => {
                 attributes: ["id", "pdfPath"],
             });
             if (!version) {
-                return error(res, "Version not found", version);
+                return error(res, "Version not found");
             }
 
             pdfPath = path.join("public", version.pdfPath);
