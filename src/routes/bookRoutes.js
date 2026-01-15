@@ -628,7 +628,8 @@ module.exports = (models, router) => {
             // Validate PDF existence BEFORE search
             if (!fsSync.existsSync(pdfPath)) {
                 return error(res, "PDF file not found", {
-                    pdfPath
+                    pdfPath,
+                    version
                 });
             }
 
