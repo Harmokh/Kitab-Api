@@ -616,23 +616,29 @@ module.exports = (models, router) => {
             const { versionId, query } = req.query;
 
             if (!versionId || !query) {
-                return error(res, "Missing required parameters");
+                return error(res, "Missing required parameters", 400);
             }
 
             version = await models.BookVersion.findByPk(versionId, {
                 attributes: ["id", "pdfPath"],
             });
 
-            if (!version || !version.pdfPath) {
-                return error(res, "Invalid book version or PDF path");
+            if (!version) {
+                return error(res, "Version not found", 404);
             }
 
-            const rootDir = path.resolve(__dirname, "../../");
-
-            pdfPath = path.resolve(rootDir, "public", version.pdfPath);
+            pdfPath = path.join(
+                "/var/www/kitab/kitab-api/public",
+                version.pdfPath
+            );
 
             if (!fsSync.existsSync(pdfPath)) {
-                return error(res, "PDF file not found", { pdfPath });
+                return error(
+                    res,
+                    "PDF file not found",
+                    404,
+                    { pdfPath }
+                );
             }
 
             const results = await searchEntirePdf({ pdfPath, query });
@@ -649,6 +655,7 @@ module.exports = (models, router) => {
             return error(
                 res,
                 err.message || "PDF search failed",
+                500,
                 { pdfPath, version }
             );
         }
