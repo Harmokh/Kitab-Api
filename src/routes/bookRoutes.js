@@ -615,10 +615,16 @@ module.exports = (models, router) => {
         try {
             const { versionId, query } = req.query;
 
+            // Validate inputs
             if (!versionId || !query) {
-                return error(res, "Missing required parameters", 400);
+                return error(res, "Missing required parameters: versionId and query", 400);
             }
 
+            if (query.trim().length < 2) {
+                return error(res, "Query must be at least 2 characters long", 400);
+            }
+
+            // Find version
             version = await models.BookVersion.findByPk(versionId, {
                 attributes: ["id", "pdfPath"],
             });
@@ -627,39 +633,53 @@ module.exports = (models, router) => {
                 return error(res, "Version not found", 404);
             }
 
-            // ✅ ABSOLUTE PATH (IMPORTANT)
+            // Build absolute path
             pdfPath = path.resolve(
                 process.cwd(),
                 "public",
                 version.pdfPath
             );
 
+            // Verify file exists
             if (!fsSync.existsSync(pdfPath)) {
                 return error(
                     res,
-                    "PDF file not found",
+                    "PDF file not found on server",
                     404,
                     { pdfPath }
                 );
             }
 
-            const results = await searchEntirePdf({ pdfPath, query });
+            // Search PDF
+            const results = await searchEntirePdf({ pdfPath, query: query.trim() });
 
-            // ✅ CORRECT success() CALL
+            // Return results
             return success(
                 res,
-                results,
-                "Search results",
+                {
+                    query: query.trim(),
+                    totalResults: results.length,
+                    totalMatches: results.reduce((sum, r) => sum + r.matches, 0),
+                    results: results
+                },
+                results.length > 0
+                    ? `Found ${results.length} page(s) with matches`
+                    : "No matches found",
                 MessageType.SUCCESS,
                 200
             );
 
         } catch (err) {
+            console.error("PDF search error:", err);
             return error(
                 res,
                 err.message || "PDF search failed",
                 500,
-                { pdfPath, version }
+                {
+                    pdfPath,
+                    versionId: version?.id,
+                    error: err.stack
+                }
             );
         }
     });
