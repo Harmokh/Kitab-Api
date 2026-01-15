@@ -8,7 +8,7 @@ const { execFile } = require("child_process");
 const { promisify } = require("util");
 const { Worker } = require("worker_threads");
 const os = require("os");
-
+const searchEntirePdf = require("../utils/searchEntirePdf");
 const execFileAsync = promisify(execFile);
 const rootDir = path.resolve(__dirname, "../../");
 
@@ -604,6 +604,26 @@ module.exports = (models, router) => {
                         ? "Error processing PDF"
                         : err.message,
             });
+        }
+    });
+
+
+    bookRouter.get("/newbook/search-words", async (req, res) => {
+
+        try {
+            const { versionId, query } = req.query;
+            if (!versionId || !query) {
+                return error(res, "Missing required parameters");
+            }
+            const version = await BookVersion.findByPk(versionId);
+            if (!version) {
+                return error(res, "Version not found");
+            }
+            const pdfPath = path.join(rootDir, "uploads", version.pdf);
+            const results = await searchEntirePdf({ pdfPath, query });
+            return success(res, results, MessageType.SUCCESS, "Search results");
+        } catch (err) {
+            return error(res, err.message);
         }
     });
 
