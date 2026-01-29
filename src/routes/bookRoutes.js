@@ -12,6 +12,7 @@ const os = require("os");
 const execFileAsync = promisify(execFile);
 const rootDir = path.resolve(__dirname, "../../");
 const searchEntirePdf = require("../utils/searchEntirePdf");
+const redisCache = require("../utils/redis");
 
 // ============================================================
 // WORKER THREAD POOL FOR PDF PROCESSING
@@ -161,6 +162,7 @@ class DiskCacheManager {
         this.cacheDir = options.cacheDir || path.join(rootDir, "cache", "pdf-pages");
         this.metadataCache = new Map();
         this.metadataTTL = options.metadataTTL || 60 * 60 * 1000;
+        this.redisTTL = options.redisTTL || 3600; // 1 hour
         this.maxCacheSize = options.maxCacheSize || 5 * 1024 * 1024 * 1024;
         this.maxCacheAge = options.maxCacheAge || 7 * 24 * 60 * 60 * 1000;
 
@@ -281,19 +283,36 @@ class DiskCacheManager {
         }
     }
 
-    getMetadata(key) {
+    async getMetadata(key) {
+        // L1: In-memory Map
         const cached = this.metadataCache.get(key);
         if (cached && Date.now() - cached.timestamp < this.metadataTTL) {
             return cached.data;
         }
+
+        // L2: Redis
+        const redisData = await redisCache.get(key);
+        if (redisData) {
+            // Replenish L1
+            this.metadataCache.set(key, {
+                data: redisData,
+                timestamp: Date.now(),
+            });
+            return redisData;
+        }
+
         return null;
     }
 
-    setMetadata(key, data) {
+    async setMetadata(key, data) {
+        // Set L1
         this.metadataCache.set(key, {
             data,
             timestamp: Date.now(),
         });
+
+        // Set L2
+        await redisCache.set(key, data, Math.floor(this.metadataTTL / 1000));
     }
 
     async getStats() {
@@ -464,9 +483,9 @@ module.exports = (models, router) => {
                 return res.status(304).end();
             }
 
-            // Get version (with metadata cache)
+            // Get version (with multi-layer metadata cache)
             const cacheKey = `version:${versionId}`;
-            let version = cacheManager.getMetadata(cacheKey);
+            let version = await cacheManager.getMetadata(cacheKey);
 
             if (!version) {
                 version = await models.BookVersion.findByPk(versionId, {
@@ -480,7 +499,7 @@ module.exports = (models, router) => {
                     });
                 }
 
-                cacheManager.setMetadata(cacheKey, version);
+                await cacheManager.setMetadata(cacheKey, version);
             }
 
             const pdfPath = path.join(rootDir, "public", version.pdfPath);
@@ -494,11 +513,11 @@ module.exports = (models, router) => {
 
             // Get total pages (cached)
             const pageCountKey = `pagecount:${versionId}`;
-            let totalPages = cacheManager.getMetadata(pageCountKey);
+            let totalPages = await cacheManager.getMetadata(pageCountKey);
 
             if (!totalPages) {
                 totalPages = await QPDFProcessor.getPageCount(pdfPath);
-                cacheManager.setMetadata(pageCountKey, totalPages);
+                await cacheManager.setMetadata(pageCountKey, totalPages);
             }
 
             // Validate page range
@@ -527,7 +546,31 @@ module.exports = (models, router) => {
                 return res.sendFile(pdfPath);
             }
 
-            // Check disk cache
+            // 1. Check Redis Cache (Fastest)
+            const redisBufferKey = `pdf:chunk:${versionId}:${start}-${end}`;
+            const redisCachedBuffer = await redisCache.getBuffer(redisBufferKey);
+
+            if (redisCachedBuffer) {
+                res.setHeader("X-Cache", "HIT-REDIS");
+                res.setHeader("X-Total-Pages", totalPages);
+                res.setHeader("Content-Type", "application/pdf");
+                res.setHeader("Content-Length", redisCachedBuffer.length);
+                res.setHeader(
+                    "Content-Disposition",
+                    `inline; filename=pages-${start}-${end}.pdf`
+                );
+                res.setHeader("Cache-Control", "public, max-age=86400");
+                res.setHeader("ETag", etag);
+
+                if (process.env.NODE_ENV !== "production") {
+                    console.log(
+                        `🚀 Redis HIT: Pages ${start}-${end} served in ${Date.now() - startTime}ms`
+                    );
+                }
+                return res.send(redisCachedBuffer);
+            }
+
+            // 2. Check disk cache (L3)
             let cachedPath = await cacheManager.getCached(versionId, start, end);
 
             if (cachedPath) {
@@ -569,6 +612,9 @@ module.exports = (models, router) => {
 
             // Save to disk cache
             await cacheManager.setCached(versionId, start, end, extractedBuffer);
+
+            // Save to Redis cache (expire in 24 hours for frequently accessed pages)
+            await redisCache.setBuffer(redisBufferKey, extractedBuffer, 86400);
 
             // Send response
             res.setHeader("X-Cache", "MISS");
@@ -622,6 +668,21 @@ module.exports = (models, router) => {
                 return error(res, "Query must be at least 2 characters long", 400);
             }
 
+            const searchCacheKey = `search:${versionId}:${query.trim()}`;
+            const cachedResults = await redisCache.get(searchCacheKey);
+
+            if (cachedResults) {
+                return success(
+                    res,
+                    cachedResults,
+                    cachedResults.totalResults > 0
+                        ? `Found ${cachedResults.totalResults} page(s) with matches (cached)`
+                        : "No matches found (cached)",
+                    MessageType.SUCCESS,
+                    200
+                );
+            }
+
             // Find version in database
             const version = await models.BookVersion.findByPk(versionId, {
                 attributes: ["id", "pdfPath"],
@@ -649,15 +710,20 @@ module.exports = (models, router) => {
                 query: query.trim()
             });
 
+            const responseData = {
+                query: query.trim(),
+                totalResults: results.length,
+                totalMatches: results.reduce((sum, r) => sum + r.matches, 0),
+                results: results
+            };
+
+            // Cache results for 1 hour
+            await redisCache.set(searchCacheKey, responseData, 3600);
+
             // Return results
             return success(
                 res,
-                {
-                    query: query.trim(),
-                    totalResults: results.length,
-                    totalMatches: results.reduce((sum, r) => sum + r.matches, 0),
-                    results: results
-                },
+                responseData,
                 results.length > 0
                     ? `Found ${results.length} page(s) with matches`
                     : "No matches found",
