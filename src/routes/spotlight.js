@@ -1,5 +1,6 @@
 const { success, warning, error, MessageType } = require("../utils/response");
 const authenticate = require("../middleware/authorize");
+const optionalAuth = require("../middleware/optionalAuth");
 const { Op } = require("sequelize");
 
 module.exports = (models, router) => {
@@ -88,7 +89,7 @@ module.exports = (models, router) => {
   );
 
   // ⭐ GETALL – Active & Valid Date Range
-  spotlightRouter.get("/spotlight/getall", authenticate, async (req, res) => {
+  spotlightRouter.get("/spotlight/getall", optionalAuth, async (req, res) => {
     try {
       const { pageSize = 10, currentPage = 1 } = req.query;
       const now = new Date();
@@ -115,7 +116,7 @@ module.exports = (models, router) => {
   });
 
   // ⭐ GETBYID
-  spotlightRouter.get("/spotlight/getbyid", authenticate, async (req, res) => {
+  spotlightRouter.get("/spotlight/getbyid", optionalAuth, async (req, res) => {
     try {
       const { id } = req.query;
 

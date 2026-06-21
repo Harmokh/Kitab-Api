@@ -1,5 +1,6 @@
 const { success, warning, error, MessageType } = require("../utils/response");
 const authenticate = require("../middleware/authorize");
+const optionalAuth = require("../middleware/optionalAuth");
 const { Op } = require("sequelize");
 const Sequelize = require("sequelize");
 const path = require("path");
@@ -256,16 +257,6 @@ module.exports = (models, router) => {
             { title, coverImage, description, author },
             { transaction: t }
           );
-          await sendNotificationOfBooktoAll(
-            "New Book Added",
-            `A new book titled "${title}" has been added to the library.`,
-            {
-              bookId: bookRecord.id,
-              bookName: title,
-              // versionId: v.id,
-            },
-            "book_update"
-          );
         }
 
         const existingVersionRecords = await models.BookVersion.findAll({
@@ -378,7 +369,7 @@ module.exports = (models, router) => {
    *       404:
    *         description: The book was not found
    */
-  bookRouter.get("/book/getbyid", authenticate, async (req, res) => {
+  bookRouter.get("/book/getbyid", optionalAuth, async (req, res) => {
     try {
       const book = await models.Book.findByPk(req.query.id, {
         include: [{ model: models.BookVersion, as: "Versions" }],
@@ -428,7 +419,7 @@ module.exports = (models, router) => {
    *                   items:
    *                     $ref: '#/components/schemas/Book'
    */
-  bookRouter.get("/book/getall", authenticate, async (req, res) => {
+  bookRouter.get("/book/getall", optionalAuth, async (req, res) => {
     try {
       let { pageSize = 10, currentPage = 1, query } = req.query;
 
@@ -897,10 +888,11 @@ module.exports = (models, router) => {
    *               items:
    *                 $ref: '#/components/schemas/Book'
    */
-  bookRouter.get("/book/recent", authenticate, async (req, res) => {
+  bookRouter.get("/book/recent", optionalAuth, async (req, res) => {
     try {
       const books = await models.Book.findAll({
         limit: 3,
+        include: [{ model: models.BookVersion, as: "Versions", required: false }],
         order: [["CreatedAt", "DESC"]],
       });
       return success(res, books, "Recent books fetched successfully");
