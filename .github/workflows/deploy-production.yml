@@ -1,0 +1,46 @@
+name: Deploy production
+
+# Production is updated only when the `production` branch is pushed:
+#   git push origin main:production
+# Pushing to `main` still deploys to the development server only (deploy.yml).
+on:
+  push:
+    branches: [production]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 134.122.108.67
+          # Same login as the development server
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SERVER_PORT }}
+          script: |
+            # Stop at the first failing step so a half-applied update is never restarted into
+            set -eu
+            cd /var/www/kitab/kitab-api
+            trap 'rm -f .schema-update.tmp.js' EXIT
+
+            echo "Running now: $(git log -1 --format='%h %s')"
+            git fetch origin production
+            echo "Incoming commits:"
+            git log --oneline HEAD..FETCH_HEAD
+
+            # Schema first, while the old code is still running: add any missing
+            # columns to whichever database this server uses. The script is read
+            # from the incoming commit because it is not on disk yet.
+            git show FETCH_HEAD:add-apple-columns.js > .schema-update.tmp.js
+            node .schema-update.tmp.js
+
+            # Fast-forward only. Unlike `reset --hard`, this keeps files edited on
+            # this server (such as its env file) and refuses to run, changing
+            # nothing, if one of those files is also changed by the update.
+            git merge --ff-only FETCH_HEAD
+
+            npm install --production
+            pm2 reload all
+            echo "Updated to: $(git log -1 --format='%h %s')"
