@@ -40,6 +40,17 @@ module.exports = (sequelize, Sequelize) => {
         allowNull: true,
         unique: true,
       },
+      appleId: {
+        field: "AppleId",
+        type: Sequelize.STRING(1000),
+        allowNull: true,
+        unique: true,
+      },
+      appleRefreshToken: {
+        field: "AppleRefreshToken",
+        type: Sequelize.TEXT,
+        allowNull: true,
+      },
       passwordHash: {
         field: "PasswordHash",
         type: Sequelize.STRING,
@@ -73,6 +84,15 @@ module.exports = (sequelize, Sequelize) => {
       updatedAt: "UpdatedAt",
     }
   );
+
+  // Keep credentials out of API responses
+  User.prototype.toJSON = function () {
+    // Copy first: get() can return the instance's own dataValues
+    const values = { ...this.get({ plain: true }) };
+    delete values.passwordHash;
+    delete values.appleRefreshToken;
+    return values;
+  };
 
   User.associate = (models) => {
     User.belongsTo(models.Role, {

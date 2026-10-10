@@ -1,5 +1,6 @@
 const { success, warning, error, MessageType } = require("../utils/response");
 const authenticate = require("../middleware/authorize");
+const requireAdmin = require("../middleware/requireAdmin");
 const { Op } = require("sequelize");
 const { sendToUser } = require("../services/notificationService");
 
@@ -9,6 +10,7 @@ module.exports = (models, router) => {
   announcementRouter.post(
     "/announcement/save",
     authenticate,
+    requireAdmin,
     async (req, res) => {
       try {
         const { id, title, description, imageUrl, startDate, endDate } =
@@ -154,6 +156,7 @@ module.exports = (models, router) => {
   announcementRouter.delete(
     "/announcement/delete",
     authenticate,
+    requireAdmin,
     async (req, res) => {
       try {
         const { id } = req.query;

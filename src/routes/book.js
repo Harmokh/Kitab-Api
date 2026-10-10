@@ -1,5 +1,6 @@
 const { success, warning, error, MessageType } = require("../utils/response");
 const authenticate = require("../middleware/authorize");
+const requireAdmin = require("../middleware/requireAdmin");
 const optionalAuth = require("../middleware/optionalAuth");
 const { Op } = require("sequelize");
 const Sequelize = require("sequelize");
@@ -228,7 +229,7 @@ module.exports = (models, router) => {
    *       500:
    *         description: Some server error
    */
-  bookRouter.post("/book/save", authenticate, async (req, res) => {
+  bookRouter.post("/book/save", authenticate, requireAdmin, async (req, res) => {
     const {
       id,
       title,
@@ -510,7 +511,7 @@ module.exports = (models, router) => {
    *       404:
    *         description: The book was not found
    */
-  bookRouter.delete("/book/delete", authenticate, async (req, res) => {
+  bookRouter.delete("/book/delete", authenticate, requireAdmin, async (req, res) => {
     try {
       const { id } = req.query;
       const updated = await models.Book.destroy({ where: { id } });

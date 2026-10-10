@@ -2,14 +2,18 @@ const multer = require("multer");
 const fs = require("fs");
 const path = require("path");
 const authenticate = require("../middleware/authorize");
-var dir = "";
+const requireAdmin = require("../middleware/requireAdmin");
+// Anchor to the app root so uploads, deletes and static serving (server.js
+// serves __dirname/public) always resolve to the same folder, regardless of
+// the process working directory.
+const PUBLIC_DIR = path.join(__dirname, "..", "..", "public");
 /* =========================
    SAFE STORAGE CONFIG
 ========================= */
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const destination = path.basename(req.query.destination || "uploads");
-    const uploadDir = path.join(dir, "public", destination);
+    const uploadDir = path.join(PUBLIC_DIR, destination);
 
     fs.mkdir(uploadDir, { recursive: true }, (err) => {
       cb(err, uploadDir);
@@ -68,6 +72,7 @@ module.exports = (models, router) => {
     .post(
       "/document/uploadmultiple",
       authenticate,
+      requireAdmin,
       upload.array("files", 10),
       (req, res) => {
         if (!req.files || req.files.length === 0) {
@@ -90,6 +95,7 @@ module.exports = (models, router) => {
     .post(
       "/document/uploadsingle",
       authenticate,
+      requireAdmin,
       upload.single("file"),
       (req, res) => {
         if (!req.file) {
@@ -102,7 +108,7 @@ module.exports = (models, router) => {
       }
     )
 
-    .delete("/document/deletefile", authenticate, async (req, res) => {
+    .delete("/document/deletefile", authenticate, requireAdmin, async (req, res) => {
       try {
         const fileUrl = req.query.url;
 
@@ -114,7 +120,11 @@ module.exports = (models, router) => {
         const safeFilePath = path
           .normalize(fileUrl)
           .replace(/^(\.\.(\/|\\|$))+/, "");
-        const fullPath = path.join(dir, "public", safeFilePath);
+        const fullPath = path.join(PUBLIC_DIR, safeFilePath);
+
+        if (!fullPath.startsWith(PUBLIC_DIR + path.sep)) {
+          return res.status(400).json({ error: "Invalid file path" });
+        }
 
         // Ensure file exists
         if (!fs.existsSync(fullPath)) {
@@ -136,13 +146,7 @@ module.exports = (models, router) => {
       }
     })
 
-    .post("/document/uploadfile", authenticate, (req, res) => {
-      dir = "";
-      dir = "./public/";
-      dir = dir + req.query.destination;
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir);
-      }
+    .post("/document/uploadfile", authenticate, requireAdmin, (req, res) => {
       var uploadsingle = multer({ storage: storage }).single("file");
       uploadsingle(req, res, function (err) {
         if (req.fileValidationError) {

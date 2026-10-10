@@ -1,5 +1,6 @@
 const { success, warning, error, MessageType } = require("../utils/response");
 const authenticate = require("../middleware/authorize");
+const requireAdmin = require("../middleware/requireAdmin");
 const optionalAuth = require("../middleware/optionalAuth");
 const { Op } = require("sequelize");
 
@@ -10,6 +11,7 @@ module.exports = (models, router) => {
   spotlightRouter.post(
     "/spotlight/saveOrUpdate",
     authenticate,
+    requireAdmin,
     async (req, res) => {
       try {
         const {
@@ -148,6 +150,7 @@ module.exports = (models, router) => {
   spotlightRouter.delete(
     "/spotlight/delete",
     authenticate,
+    requireAdmin,
     async (req, res) => {
       try {
         const { id } = req.query;

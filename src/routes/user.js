@@ -1,8 +1,12 @@
 const { success, warning, error, MessageType } = require("../utils/response");
 const authenticate = require("../middleware/authorize");
+const optionalAuth = require("../middleware/optionalAuth");
+const requireAdmin = require("../middleware/requireAdmin");
+const { isAdmin } = requireAdmin;
 const { Op } = require("sequelize");
 const { sequelize } = require("../models/models");
 const bcrypt = require("bcrypt");
+const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
 const fs = require("fs");
 const multer = require("multer");
@@ -14,6 +18,11 @@ const {
   getForgetPasswordEmailTemplate,
   getAccountStatusEmailTemplate,
 } = require("../utils/emailTemplates");
+const {
+  verifyIdentityToken,
+  exchangeAuthorizationCode,
+  revokeToken,
+} = require("../utils/appleAuth");
 const client = new OAuth2Client(
   "1061077670326-7ng30cuvgbdbu1c7cbdmqrv4fslp8gpb.apps.googleusercontent.com"
 );
@@ -73,6 +82,44 @@ module.exports = (models, router) => {
     return await bcrypt.hash(password, SALT_ROUNDS);
   };
 
+  // Fields a user may set on their own account. Everything else (role, status,
+  // verification, credentials, social ids) is admin-only.
+  const PROFILE_FIELDS = ["name", "bio", "address", "image"];
+
+  const pickFields = (source, fields) =>
+    fields.reduce((picked, field) => {
+      if (source[field] !== undefined) picked[field] = source[field];
+      return picked;
+    }, {});
+
+  // Placeholder password for accounts that sign in with Google or Apple
+  const randomPasswordHash = () =>
+    hashPassword(crypto.randomBytes(24).toString("hex"));
+
+  // An account that was never activated by email is proven by the sign-in
+  // provider's verified email instead. Its password is replaced because
+  // whoever registered it is unproven.
+  const activationViaProvider = async () => ({
+    isVerified: true,
+    isActive: true,
+    passwordHash: await randomPasswordHash(),
+  });
+
+  // Uploaded profile images live flat in public/profile_images; using only the
+  // file name keeps a crafted `image` value from pointing outside that folder.
+  const removeProfileImage = (image) => {
+    if (typeof image !== "string" || !image.startsWith("/profile_images/")) {
+      return;
+    }
+    const imagePath = path.join(
+      "./public/profile_images",
+      path.basename(image)
+    );
+    if (fs.existsSync(imagePath) && fs.statSync(imagePath).isFile()) {
+      fs.unlinkSync(imagePath);
+    }
+  };
+
   /**
    * @swagger
    * /user/save:
@@ -95,21 +142,58 @@ module.exports = (models, router) => {
    *       500:
    *         description: Some server error
    */
-  userRouter.post("/user/save", async (req, res) => {
-    const { id, password, ...userData } = req.body;
+  userRouter.post("/user/save", optionalAuth, async (req, res) => {
+    const { id, password } = req.body;
+
+    let callerIsAdmin;
+    try {
+      callerIsAdmin = await isAdmin(req.user?.id);
+    } catch (err) {
+      return error(
+        res,
+        err.message || "An error occurred while saving the user."
+      );
+    }
+
+    // Registering stays public. Updating needs a login: your own account, or
+    // any account for an admin.
+    if (id && !callerIsAdmin && req.user?.id !== id) {
+      return error(
+        res,
+        "You are not allowed to update this user",
+        MessageType.ERROR,
+        req.user ? 403 : 401
+      );
+    }
+
+    // Admins may set any field. Everyone else is limited to a fixed list, so a
+    // request cannot give itself a role, skip verification or set credentials.
+    let userData;
+    if (callerIsAdmin) {
+      userData = { ...req.body };
+      delete userData.id;
+      delete userData.password;
+    } else if (id) {
+      userData = pickFields(req.body, PROFILE_FIELDS);
+    } else {
+      userData = pickFields(req.body, [...PROFILE_FIELDS, "email"]);
+    }
 
     const t = await sequelize.transaction();
     try {
       let userRecord;
 
-      // 🔍 Check email uniqueness
-      const existingUser = await models.User.findOne({
-        where: {
-          email: userData.email,
-          ...(id ? { id: { [Op.ne]: id } } : {}),
-        },
-        transaction: t,
-      });
+      // 🔍 Check email uniqueness (skipped when the email is not being set)
+      const existingUser =
+        userData.email === undefined
+          ? null
+          : await models.User.findOne({
+              where: {
+                email: userData.email,
+                ...(id ? { id: { [Op.ne]: id } } : {}),
+              },
+              transaction: t,
+            });
 
       if (existingUser) {
         // ⭐ If email exists but user is NOT verified → resend activation
@@ -151,12 +235,26 @@ module.exports = (models, router) => {
           transaction: t,
         });
 
-        if (userRecord) {
-          if (password) {
-            userData.passwordHash = await hashPassword(password);
-          }
-          await userRecord.update(userData, { transaction: t });
+        if (!userRecord) {
+          await t.rollback();
+          return warning(res, "User not found", MessageType.Warning);
         }
+
+        // Only an admin can change an email: nothing verifies the new address
+        if (
+          !callerIsAdmin &&
+          req.body.email &&
+          String(req.body.email).toLowerCase() !==
+            userRecord.email.toLowerCase()
+        ) {
+          await t.rollback();
+          return warning(res, "Email cannot be changed", MessageType.Warning);
+        }
+
+        if (password) {
+          userData.passwordHash = await hashPassword(password);
+        }
+        await userRecord.update(userData, { transaction: t });
       }
 
       // ➕ Create user
@@ -168,6 +266,15 @@ module.exports = (models, router) => {
             "Password is required for new users",
             MessageType.Warning
           );
+        }
+
+        if (!callerIsAdmin) {
+          // Self-registration always gets the normal user role
+          const userRole = await models.Role.findOne({
+            where: { name: "User" },
+            transaction: t,
+          });
+          userData.roleId = userRole ? userRole.id : 2;
         }
 
         userData.passwordHash = await hashPassword(password);
@@ -424,8 +531,8 @@ module.exports = (models, router) => {
     }
   });
 
-  // Change Status of user
-  userRouter.post("/user/changestatus", async (req, res) => {
+  // Change Status of user (admin only)
+  userRouter.post("/user/changestatus", authenticate, requireAdmin, async (req, res) => {
     try {
       const { id, newStatus } = req.body;
 
@@ -542,6 +649,16 @@ module.exports = (models, router) => {
         );
       }
 
+      // The email decides which account this is, so Google must vouch for it
+      if (!payload.email_verified) {
+        await t.rollback();
+        return warning(
+          res,
+          "Your Google email is not verified",
+          MessageType.Warning
+        );
+      }
+
       // Check if user exists
       let userRecord = await models.User.findOne({
         where: { email },
@@ -550,17 +667,30 @@ module.exports = (models, router) => {
       });
 
       if (userRecord) {
+        const linkData = {};
         // Update Google ID if missing
         if (!userRecord.googleId) {
-          await userRecord.update({ googleId }, { transaction: t });
+          linkData.googleId = googleId;
+        }
+        if (!userRecord.isVerified) {
+          Object.assign(linkData, await activationViaProvider());
+        }
+        if (Object.keys(linkData).length) {
+          await userRecord.update(linkData, { transaction: t });
+        }
+
+        if (userRecord.isDeleted || !userRecord.isActive) {
+          await t.rollback();
+          return warning(
+            res,
+            "Your account is deactivated. Please contact the administrator.",
+            MessageType.Warning
+          );
         }
       } else {
         // Create new user
         // Generate random password hash since it's required
-        const randomPassword =
-          Math.random().toString(36).slice(-8) +
-          Math.random().toString(36).slice(-8);
-        const passwordHash = await hashPassword(randomPassword);
+        const passwordHash = await randomPasswordHash();
 
         // Get default role (assuming 'User' role exists with ID 2 or similar, but safer to query)
         // For now, let's assume roleId 2 is User, or query for it.
@@ -627,6 +757,162 @@ module.exports = (models, router) => {
     }
   });
 
+  // Apple Auth (Login/Signup)
+  userRouter.post("/user/apple-auth", async (req, res) => {
+    const { identityToken, authorizationCode, fullName, nonce } = req.body;
+
+    if (!identityToken) {
+      return warning(
+        res,
+        "Apple identity token is required",
+        MessageType.Warning
+      );
+    }
+
+    // Verify Apple Token (before opening a transaction: it calls Apple)
+    let applePayload;
+    try {
+      applePayload = await verifyIdentityToken(identityToken, nonce);
+    } catch (err) {
+      console.error("Apple token verification failed:", err.message);
+      return warning(
+        res,
+        "Apple sign in could not be verified. Please try again.",
+        MessageType.Warning
+      );
+    }
+    const { sub: appleId, emailVerified } = applePayload;
+    // Only trust the email for matching accounts when Apple has verified it
+    const email = emailVerified ? applePayload.email : null;
+
+    // Null until the Sign in with Apple key is configured on the server
+    const appleRefreshToken = await exchangeAuthorizationCode(
+      authorizationCode
+    );
+
+    const t = await sequelize.transaction();
+    try {
+      // Returning Apple user
+      let userRecord = await models.User.findOne({
+        where: { appleId },
+        include: [{ model: models.Role, as: "Role" }],
+        transaction: t,
+      });
+
+      // Existing account with the same email → link it to this Apple ID
+      if (!userRecord && email) {
+        userRecord = await models.User.findOne({
+          where: { email },
+          include: [{ model: models.Role, as: "Role" }],
+          transaction: t,
+        });
+
+        if (userRecord) {
+          const linkData = { appleId };
+          if (!userRecord.isVerified) {
+            Object.assign(linkData, await activationViaProvider());
+          }
+          await userRecord.update(linkData, { transaction: t });
+        }
+      }
+
+      if (userRecord) {
+        if (userRecord.isDeleted || !userRecord.isActive) {
+          await t.rollback();
+          return warning(
+            res,
+            "Your account is deactivated. Please contact the administrator.",
+            MessageType.Warning
+          );
+        }
+
+        if (appleRefreshToken) {
+          await userRecord.update({ appleRefreshToken }, { transaction: t });
+        }
+      } else {
+        if (!email) {
+          await t.rollback();
+          return warning(
+            res,
+            "Email not found in Apple token",
+            MessageType.Warning
+          );
+        }
+
+        // Apple only sends the name on the very first sign in
+        const appleName = [fullName?.givenName, fullName?.familyName]
+          .filter(Boolean)
+          .join(" ")
+          .trim();
+        const fallbackName = email.endsWith("@privaterelay.appleid.com")
+          ? "Apple User"
+          : email.split("@")[0];
+
+        // Generate random password hash since it's required
+        const passwordHash = await randomPasswordHash();
+
+        const userRole = await models.Role.findOne({
+          where: { name: "User" },
+          transaction: t,
+        });
+        const roleId = userRole ? userRole.id : 2;
+
+        userRecord = await models.User.create(
+          {
+            name: appleName || fallbackName,
+            email,
+            appleId,
+            appleRefreshToken,
+            passwordHash,
+            roleId,
+            isVerified: true, // Apple verified
+          },
+          { transaction: t }
+        );
+
+        // Fetch again to include Role
+        userRecord = await models.User.findByPk(userRecord.id, {
+          include: [{ model: models.Role, as: "Role" }],
+          transaction: t,
+        });
+      }
+
+      // Generate JWT
+      const token = jwt.sign(
+        {
+          id: userRecord.id,
+          roleId: userRecord.roleId,
+          email: userRecord.email,
+        },
+        process.env.JWT_SECRET,
+        { expiresIn: process.env.JWT_EXPIRES_IN }
+      );
+
+      // Record Session
+      await models.UserSession.create(
+        {
+          userId: userRecord.id,
+          loginTime: new Date(),
+          ipAddress: req.ip || req.headers["x-forwarded-for"] || null,
+          userAgent: req.headers["user-agent"] || null,
+          isActive: true,
+        },
+        { transaction: t }
+      );
+
+      await t.commit();
+      return success(
+        res,
+        { token, user: userRecord },
+        "Apple authentication successful"
+      );
+    } catch (err) {
+      await t.rollback();
+      console.error("Apple Auth error:", err);
+      return error(res, err.message || "Apple authentication failed");
+    }
+  });
+
   // 🔍 Get User by ID
   /**
    * @swagger
@@ -653,6 +939,16 @@ module.exports = (models, router) => {
    */
   userRouter.get("/user/getbyid", authenticate, async (req, res) => {
     try {
+      // Your own record, or any record for an admin
+      if (req.query.id !== req.user.id && !(await isAdmin(req.user.id))) {
+        return error(
+          res,
+          "You are not allowed to view this user",
+          MessageType.ERROR,
+          403
+        );
+      }
+
       const userRecord = await models.User.findOne({
         where: { id: req.query.id, isDeleted: false },
         include: [{ model: models.Role, as: "Role" }],
@@ -701,7 +997,7 @@ module.exports = (models, router) => {
    *                   items:
    *                     $ref: '#/components/schemas/User'
    */
-  userRouter.get("/user/getall", authenticate, async (req, res) => {
+  userRouter.get("/user/getall", authenticate, requireAdmin, async (req, res) => {
     try {
       const { pageSize = 10, currentPage = 1, ...filters } = req.query;
       // const whereClause = { isDeleted: false };
@@ -727,7 +1023,7 @@ module.exports = (models, router) => {
   });
 
   // 📄 Get Master List (All Users without pagination)
-  userRouter.get("/user/getmaster", authenticate, async (req, res) => {
+  userRouter.get("/user/getmaster", authenticate, requireAdmin, async (req, res) => {
     try {
       const users = await models.User.findAll({
         where: { isDeleted: false },
@@ -741,8 +1037,8 @@ module.exports = (models, router) => {
     }
   });
 
-  // 🗑️ Soft Delete User
-  userRouter.delete("/user/delete", authenticate, async (req, res) => {
+  // 🗑️ Soft Delete User (admin only; users delete themselves via /user/delete-account)
+  userRouter.delete("/user/delete", authenticate, requireAdmin, async (req, res) => {
     try {
       const { id } = req.query;
       const [updated] = await models.User.update(
@@ -760,8 +1056,82 @@ module.exports = (models, router) => {
     }
   });
 
-  // 🔄 Change User Role
-  userRouter.post("/user/changerole", authenticate, async (req, res) => {
+  // 🗑️ Permanently delete the logged-in user's own account (in-app deletion)
+  userRouter.delete("/user/delete-account", authenticate, async (req, res) => {
+    try {
+      // Always the token's own user, never an id from the request
+      const userId = req.user.id;
+      const userRecord = await models.User.findOne({ where: { id: userId } });
+
+      // Already gone (e.g. a retried request) → nothing left to delete
+      if (!userRecord) {
+        return success(res, null, "Account deleted successfully");
+      }
+
+      const { image, appleRefreshToken } = userRecord;
+      const annotations = await models.Annotation.findAll({
+        where: { userId },
+        attributes: ["audioPath"],
+      });
+
+      const t = await sequelize.transaction();
+      try {
+        // Keep books this user uploaded; only detach them from the account
+        await models.BookVersion.update(
+          { uploadedBy: null },
+          { where: { uploadedBy: userId }, transaction: t }
+        );
+
+        const userOwnedModels = [
+          models.Annotation,
+          models.Bookmark,
+          models.Favorite,
+          models.UserEngagement,
+          models.UserSession,
+          models.UserDevice,
+          models.UserFcmToken,
+          models.Notification,
+        ];
+        for (const model of userOwnedModels) {
+          await model.destroy({ where: { userId }, transaction: t });
+        }
+
+        await userRecord.destroy({ transaction: t });
+        await t.commit();
+      } catch (err) {
+        await t.rollback();
+        throw err;
+      }
+
+      // The account is gone; cleanup below must not fail the request
+      await revokeToken(appleRefreshToken);
+
+      try {
+        removeProfileImage(image);
+
+        const audioDir = path.join(__dirname, "../../public/audio");
+        for (const { audioPath } of annotations) {
+          if (typeof audioPath !== "string" || !audioPath.includes("/audio/")) {
+            continue;
+          }
+          const audioFile = path.join(audioDir, path.basename(audioPath));
+          if (fs.existsSync(audioFile)) {
+            fs.unlinkSync(audioFile);
+          }
+        }
+      } catch (cleanupErr) {
+        console.error("Account file cleanup error:", cleanupErr);
+      }
+
+      return success(res, null, "Account deleted successfully");
+    } catch (err) {
+      console.error("Delete account error:", err);
+      return error(res, err.message || "Unable to delete account");
+    }
+  });
+
+  // 🔄 Change User Role (admin only)
+  userRouter.post("/user/changerole", authenticate, requireAdmin, async (req, res) => {
     try {
       const { id, roleId } = req.body;
       const userRecord = await models.User.findOne({ where: { id } });
@@ -784,6 +1154,16 @@ module.exports = (models, router) => {
         return warning(res, "New password is required", MessageType.Warning);
       }
 
+      // Your own password, or anyone's for an admin
+      if (id !== req.user.id && !(await isAdmin(req.user.id))) {
+        return error(
+          res,
+          "You are not allowed to reset this password",
+          MessageType.ERROR,
+          403
+        );
+      }
+
       const userRecord = await models.User.findOne({ where: { id } });
       if (!userRecord) {
         return warning(res, "User not found", MessageType.Warning);
@@ -798,8 +1178,8 @@ module.exports = (models, router) => {
     }
   });
 
-  // 📄 List Users by Role
-  userRouter.get("/user/byrole", authenticate, async (req, res) => {
+  // 📄 List Users by Role (admin only)
+  userRouter.get("/user/byrole", authenticate, requireAdmin, async (req, res) => {
     try {
       const { roleId } = req.query;
       if (!roleId) {
@@ -840,15 +1220,7 @@ module.exports = (models, router) => {
         }
 
         // Delete old image if exists and is local
-        if (
-          userRecord.image &&
-          userRecord.image.startsWith("/profile_images/")
-        ) {
-          const oldPath = path.join("./public", userRecord.image);
-          if (fs.existsSync(oldPath)) {
-            fs.unlinkSync(oldPath);
-          }
-        }
+        removeProfileImage(userRecord.image);
 
         const imagePath = "/profile_images/" + req.file.filename;
         await userRecord.update({ image: imagePath });

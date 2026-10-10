@@ -1,5 +1,6 @@
 const { success, warning, error, MessageType } = require("../utils/response");
 const authenticate = require("../middleware/authorize");
+const requireAdmin = require("../middleware/requireAdmin");
 const notificationService = require("../services/notificationService");
 
 module.exports = (models, router) => {
@@ -42,7 +43,7 @@ module.exports = (models, router) => {
     });
 
     // 🔔 Send Notification (For testing/admin purposes)
-    notificationRouter.post("/notifications/send", authenticate, async (req, res) => {
+    notificationRouter.post("/notifications/send", authenticate, requireAdmin, async (req, res) => {
         try {
             const { userId, title, body, data, type } = req.body;
 
@@ -176,7 +177,7 @@ module.exports = (models, router) => {
     });
 
     // test server notification for a user 
-    notificationRouter.post("/notifications/test/:userId", async (req, res) => {
+    notificationRouter.post("/notifications/test/:userId", authenticate, requireAdmin, async (req, res) => {
         try {
             const { userId } = req.params;
             const result = await notificationService.sendToUser(userId, { title: "Test Notification", body: "This is a test notification" });
@@ -185,7 +186,7 @@ module.exports = (models, router) => {
             return error(res, err.message);
         }
     })
-    notificationRouter.get("/notifications/getdevicetoken/:userId", async (req, res) => {
+    notificationRouter.get("/notifications/getdevicetoken/:userId", authenticate, requireAdmin, async (req, res) => {
         try {
             const { userId } = req.params;
             // get the device token of the user bu id 

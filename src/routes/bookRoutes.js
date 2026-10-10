@@ -1,5 +1,6 @@
 const { success, warning, error, MessageType } = require("../utils/response");
 const authenticate = require("../middleware/authorize");
+const requireAdmin = require("../middleware/requireAdmin");
 const path = require("path");
 const fs = require("fs").promises;
 const fsSync = require("fs");
@@ -777,7 +778,7 @@ module.exports = (models, router) => {
     });
 
     // Clear cache
-    bookRouter.delete("/newbook/cache/clear", authenticate, async (req, res) => {
+    bookRouter.delete("/newbook/cache/clear", authenticate, requireAdmin, async (req, res) => {
         try {
             const stats = await cacheManager.getStats();
 
